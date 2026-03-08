@@ -1,0 +1,1 @@
+packageSearchIndex = [{"l":"All Packages","u":"allpackages-index.html","k":"18"},{"l":"io.signoz.springboot.audit"},{"l":"io.signoz.springboot.logging"},{"l":"io.signoz.springboot.masking"},{"l":"io.signoz.springboot.metrics"},{"l":"io.signoz.springboot.properties"},{"l":"io.signoz.springboot.tracing"}];updateSearchResults();

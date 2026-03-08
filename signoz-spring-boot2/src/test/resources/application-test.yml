@@ -1,0 +1,21 @@
+spring:
+  main:
+    allow-bean-definition-overriding: true
+
+signoz:
+  enabled: true
+  endpoint: http://localhost:4317
+  service-name: test-service
+  tracing:
+    enabled: false
+  logging:
+    mode: JSON
+  web:
+    log-requests: true
+    log-headers: false
+    log-request-body: false
+    log-response-body: false
+    exclude-paths:
+      - /actuator/**
+  audit:
+    enabled: true

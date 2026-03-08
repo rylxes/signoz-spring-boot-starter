@@ -1,0 +1,13 @@
+io/signoz/springboot/autoconfigure/SigNozLoggingAutoConfiguration.class
+io/signoz/springboot/autoconfigure/SigNozLoggingAutoConfiguration$JsonEncoderConfiguration.class
+io/signoz/springboot/web/HttpLoggingFilter.class
+io/signoz/springboot/autoconfigure/SigNozMetricsAutoConfiguration.class
+io/signoz/springboot/web/TraceIdMdcFilter.class
+io/signoz/springboot/web/CachedBodyResponseWrapper$CachingServletOutputStream.class
+io/signoz/springboot/web/CachedBodyResponseWrapper.class
+io/signoz/springboot/autoconfigure/SigNozTracingAutoConfiguration.class
+io/signoz/springboot/web/CachedBodyRequestWrapper.class
+io/signoz/springboot/web/CachedBodyRequestWrapper$CachedBodyServletInputStream.class
+io/signoz/springboot/autoconfigure/SigNozWebAutoConfiguration.class
+io/signoz/springboot/autoconfigure/SigNozAutoConfiguration.class
+io/signoz/springboot/autoconfigure/SigNozAuditAutoConfiguration.class

@@ -1,0 +1,1 @@
+typeSearchIndex = [{"l":"All Classes and Interfaces","u":"allclasses-index.html","k":"18"},{"p":"io.signoz.springboot.processor","l":"JavacAstLogInjector"},{"p":"io.signoz.springboot.processor","l":"JavacLogInjector"},{"p":"io.signoz.springboot.processor","l":"SigNozLogProcessor"}];updateSearchResults();

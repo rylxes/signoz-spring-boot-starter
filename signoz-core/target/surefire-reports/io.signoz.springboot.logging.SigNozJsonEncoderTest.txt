@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: io.signoz.springboot.logging.SigNozJsonEncoderTest
+-------------------------------------------------------------------------------
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 3, Time elapsed: 0.060 s -- in io.signoz.springboot.logging.SigNozJsonEncoderTest

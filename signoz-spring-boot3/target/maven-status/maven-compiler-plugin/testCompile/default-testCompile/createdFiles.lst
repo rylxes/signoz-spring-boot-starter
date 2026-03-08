@@ -1,0 +1,13 @@
+io/signoz/springboot/aspect/AuditLogAspectIntegrationTest.class
+io/signoz/springboot/autoconfigure/SigNozAuditAutoConfigurationTest.class
+io/signoz/springboot/web/HttpLoggingFilterTest.class
+io/signoz/springboot/web/HttpLoggingFilterTest$TestController.class
+io/signoz/springboot/web/TraceIdMdcFilterTest.class
+io/signoz/springboot/aspect/AuditLogAspectIntegrationTest$AuditedService.class
+io/signoz/springboot/TestSigNozApplication.class
+io/signoz/springboot/autoconfigure/SigNozAutoConfigurationTest.class
+io/signoz/springboot/aspect/AuditLogAspectIntegrationTest$TestBeans.class
+io/signoz/springboot/autoconfigure/SigNozLoggingAutoConfigurationTest.class
+io/signoz/springboot/aspect/AuditLogAspectIntegrationTest$AuditEventCapture.class
+io/signoz/springboot/autoconfigure/SigNozTracingAutoConfigurationTest.class
+io/signoz/springboot/autoconfigure/SigNozWebAutoConfigurationTest.class

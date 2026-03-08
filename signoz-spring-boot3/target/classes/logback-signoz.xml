@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SigNoz base Logback configuration (Spring Boot 3.x).
+
+  Include in your logback-spring.xml:
+    <include resource="logback-signoz.xml"/>
+-->
+<included>
+
+    <appender name="SIGNOZ_JSON" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="io.signoz.springboot.logging.SigNozJsonEncoder">
+            <includeContext>true</includeContext>
+            <includeMdc>true</includeMdc>
+            <includeStructuredArguments>true</includeStructuredArguments>
+            <fieldNames>
+                <timestamp>@timestamp</timestamp>
+                <message>message</message>
+                <logger>logger</logger>
+                <thread>thread</thread>
+                <level>level</level>
+                <levelValue>[ignore]</levelValue>
+            </fieldNames>
+        </encoder>
+    </appender>
+
+    <appender name="SIGNOZ_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} [traceId=%X{traceId} spanId=%X{spanId}] - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <springProfile name="local,dev">
+        <root level="INFO">
+            <appender-ref ref="SIGNOZ_CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="staging,production,prod">
+        <root level="INFO">
+            <appender-ref ref="SIGNOZ_JSON"/>
+        </root>
+    </springProfile>
+
+</included>

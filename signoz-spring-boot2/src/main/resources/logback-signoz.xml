@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SigNoz base Logback configuration.
+
+  Include this in your project's logback-spring.xml:
+
+    <include resource="logback-signoz.xml"/>
+
+  Or reference individual appenders by name (SIGNOZ_CONSOLE, SIGNOZ_JSON, SIGNOZ_OTLP).
+
+  The OTLP appender is configured programmatically by SigNozLoggingAutoConfiguration.
+  This file provides the JSON console appender for the JSON and BOTH modes.
+-->
+<included>
+
+    <!-- ===== Console appender (structured JSON output to stdout) ===== -->
+    <appender name="SIGNOZ_JSON" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="io.signoz.springboot.logging.SigNozJsonEncoder">
+            <includeContext>true</includeContext>
+            <includeMdc>true</includeMdc>
+            <includeStructuredArguments>true</includeStructuredArguments>
+            <fieldNames>
+                <timestamp>@timestamp</timestamp>
+                <message>message</message>
+                <logger>logger</logger>
+                <thread>thread</thread>
+                <level>level</level>
+                <levelValue>[ignore]</levelValue>
+            </fieldNames>
+        </encoder>
+    </appender>
+
+    <!-- ===== Plain console appender (for local development) ===== -->
+    <appender name="SIGNOZ_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} [traceId=%X{traceId} spanId=%X{spanId}] - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!--
+      Profile-based defaults.
+      Override in your application's logback-spring.xml as needed.
+    -->
+    <springProfile name="local,dev">
+        <root level="INFO">
+            <appender-ref ref="SIGNOZ_CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="staging,production,prod">
+        <root level="INFO">
+            <appender-ref ref="SIGNOZ_JSON"/>
+            <!-- SIGNOZ_OTLP is added programmatically by SigNozLoggingAutoConfiguration -->
+        </root>
+    </springProfile>
+
+</included>

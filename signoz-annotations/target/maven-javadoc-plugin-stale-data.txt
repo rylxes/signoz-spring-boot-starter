@@ -1,0 +1,43 @@
+@options
+@packages
+-encoding
+'UTF-8'
+-protected
+-source
+'8'
+-sourcepath
+'/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/src/main/java:/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/generated-sources/annotations'
+-author
+-bottom
+'Copyright &#169; 2026. All rights reserved.'
+-charset
+'UTF-8'
+-d
+'/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/apidocs'
+-docencoding
+'UTF-8'
+-Xdoclint:none
+-doctitle
+'SigNoz Annotations 1.0.0 API'
+-linkoffline
+'https://docs.oracle.com/javase/8/docs/api' '/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/javadoc-bundle-options'
+-use
+-version
+-windowtitle
+'SigNoz Annotations 1.0.0 API'
+io.signoz.springboot.annotation
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/src/main/java = 1771975839188
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/generated-sources/annotations = 1772965310819
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/apidocs/tag-search-index.js = 1772965312100
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/apidocs/overview-tree.html = 1772965312093
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/apidocs/module-search-index.js = 1772965312099
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/apidocs/index.html = 1772965312106
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/apidocs/package-search-index.js = 1772965312099
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/apidocs/index-all.html = 1772965312105
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/apidocs/allpackages-index.html = 1772965312099
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/apidocs/member-search-index.js = 1772965312100
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/apidocs/help-doc.html = 1772965312112
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/apidocs/element-list = 1772965312075
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/apidocs/search.html = 1772965312106
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/apidocs/allclasses-index.html = 1772965312098
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/apidocs/type-search-index.js = 1772965312099

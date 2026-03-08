@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.rylxes</groupId>
+        <artifactId>signoz-spring-boot-starter-parent</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>signoz-spring-boot3-starter</artifactId>
+    <name>SigNoz Spring Boot 3 Starter</name>
+    <description>
+        Add this single dependency to a Spring Boot 3.x project to enable all SigNoz features:
+        @SigNozLog (compile-time logger injection), @Masked (field masking), @Traced (OTel spans),
+        @AuditLog (audit trail), HTTP request logging, and Micrometer OTLP metrics.
+    </description>
+
+    <dependencies>
+        <!-- Annotations (needed at compile time) -->
+        <dependency>
+            <groupId>io.github.rylxes</groupId>
+            <artifactId>signoz-annotations</artifactId>
+        </dependency>
+
+        <!-- Annotation processor (compile-only) -->
+        <dependency>
+            <groupId>io.github.rylxes</groupId>
+            <artifactId>signoz-annotation-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Core business logic -->
+        <dependency>
+            <groupId>io.github.rylxes</groupId>
+            <artifactId>signoz-core</artifactId>
+        </dependency>
+
+        <!-- Spring Boot 3.x auto-configuration + web filters (jakarta.servlet) -->
+        <dependency>
+            <groupId>io.github.rylxes</groupId>
+            <artifactId>signoz-spring-boot3</artifactId>
+        </dependency>
+    </dependencies>
+</project>

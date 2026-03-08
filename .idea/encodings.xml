@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="Encoding">
+    <file url="file://$PROJECT_DIR$/signoz-annotation-processor/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/signoz-annotation-processor/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/signoz-annotations/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/signoz-annotations/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/signoz-core/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/signoz-core/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/signoz-spring-boot2-starter/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/signoz-spring-boot2-starter/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/signoz-spring-boot2/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/signoz-spring-boot2/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/signoz-spring-boot3-starter/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/signoz-spring-boot3-starter/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/signoz-spring-boot3/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/signoz-spring-boot3/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/src/main/resources" charset="UTF-8" />
+  </component>
+</project>

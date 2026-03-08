@@ -1,0 +1,15 @@
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-core/src/test/java/io/signoz/springboot/audit/SigNozAuditHandlerTest.java
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-core/src/test/java/io/signoz/springboot/properties/SigNozPropertiesTest.java
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-core/src/test/java/io/signoz/springboot/PartialMaskingStrategyTest.java
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-core/src/test/java/io/signoz/springboot/masking/MaskingRegistryCustomPatternTest.java
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-core/src/test/java/io/signoz/springboot/audit/AuditEventTest.java
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-core/src/test/java/io/signoz/springboot/MaskingRegistryTest.java
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-core/src/test/java/io/signoz/springboot/tracing/TracedAspectTest.java
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-core/src/test/java/io/signoz/springboot/audit/AuditLogAspectTest.java
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-core/src/test/java/io/signoz/springboot/properties/SigNozLoggingPropertiesTest.java
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-core/src/test/java/io/signoz/springboot/logging/OtlpLogbackAppenderTest.java
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-core/src/test/java/io/signoz/springboot/masking/FullMaskingStrategyTest.java
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-core/src/test/java/io/signoz/springboot/properties/SigNozAuditPropertiesTest.java
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-core/src/test/java/io/signoz/springboot/logging/SigNozJsonEncoderTest.java
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-core/src/test/java/io/signoz/springboot/masking/MaskedArgumentAspectTest.java
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-core/src/test/java/io/signoz/springboot/masking/RegexMaskingStrategyTest.java

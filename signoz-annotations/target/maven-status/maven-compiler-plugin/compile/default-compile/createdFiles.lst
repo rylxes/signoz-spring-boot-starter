@@ -1,0 +1,5 @@
+io/signoz/springboot/annotation/AuditLog.class
+io/signoz/springboot/annotation/SigNozLog.class
+io/signoz/springboot/annotation/Traced.class
+io/signoz/springboot/annotation/Masked.class
+io/signoz/springboot/annotation/Masked$MaskingStrategy.class

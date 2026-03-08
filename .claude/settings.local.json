@@ -1,0 +1,41 @@
+{
+  "allowedTools": ["bash", "read", "write", "edit"],
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:signoz.io)",
+      "WebFetch(domain:opentelemetry.io)",
+      "WebFetch(domain:github.com)",
+      "Bash(mvn clean install:*)",
+      "Bash(mvn dependency:resolve:*)",
+      "Bash(mvn dependency:tree:*)",
+      "Bash(mvn help:effective-pom:*)",
+      "Bash(export PATH=\"$PATH:/usr/local/bin:/opt/homebrew/bin:$HOME/.sdkman/candidates/maven/current/bin\")",
+      "Bash(/opt/homebrew/bin/mvn clean install:*)",
+      "Bash(javap:*)",
+      "Bash(wc -l:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-core/src/test/java/io/signoz/springboot/properties/SigNozPropertiesTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-core/src/test/java/io/signoz/springboot/properties/SigNozLoggingPropertiesTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-spring-boot2/src/test/java/io/signoz/springboot/TestSigNozApplication.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-spring-boot2/src/test/resources/application-test.yml:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-core/src/test/java/io/signoz/springboot/properties/SigNozAuditPropertiesTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-core/src/test/java/io/signoz/springboot/masking/FullMaskingStrategyTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-spring-boot2/src/test/java/io/signoz/springboot/autoconfigure/SigNozAutoConfigurationTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-core/src/test/java/io/signoz/springboot/masking/RegexMaskingStrategyTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-spring-boot2/src/test/java/io/signoz/springboot/autoconfigure/SigNozLoggingAutoConfigurationTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-spring-boot2/src/test/java/io/signoz/springboot/autoconfigure/SigNozTracingAutoConfigurationTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-core/src/test/java/io/signoz/springboot/masking/MaskingRegistryCustomPatternTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-spring-boot2/src/test/java/io/signoz/springboot/autoconfigure/SigNozWebAutoConfigurationTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-spring-boot2/src/test/java/io/signoz/springboot/autoconfigure/SigNozAuditAutoConfigurationTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-core/src/test/java/io/signoz/springboot/audit/AuditEventTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-spring-boot2/src/test/java/io/signoz/springboot/web/TraceIdMdcFilterTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-spring-boot2/src/test/java/io/signoz/springboot/web/HttpLoggingFilterTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-core/src/test/java/io/signoz/springboot/audit/AuditLogAspectTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-spring-boot2/src/test/java/io/signoz/springboot/aspect/AuditLogAspectIntegrationTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-core/src/test/java/io/signoz/springboot/audit/SigNozAuditHandlerTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-core/src/test/java/io/signoz/springboot/masking/MaskedArgumentAspectTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-core/src/test/java/io/signoz/springboot/tracing/TracedAspectTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-core/src/test/java/io/signoz/springboot/logging/OtlpLogbackAppenderTest.java:*)",
+      "Bash(/Users/rylxes/WebDevelopment/Signoz/signoz-core/src/test/java/io/signoz/springboot/logging/SigNozJsonEncoderTest.java:*)"
+    ]
+  }
+}

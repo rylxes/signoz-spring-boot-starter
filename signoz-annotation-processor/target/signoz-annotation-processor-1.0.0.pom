@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.rylxes</groupId>
+        <artifactId>signoz-spring-boot-starter-parent</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>signoz-annotation-processor</artifactId>
+    <name>SigNoz Annotation Processor</name>
+    <description>Compile-time APT processor: injects logger field into @SigNozLog-annotated classes</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.github.rylxes</groupId>
+            <artifactId>signoz-annotations</artifactId>
+        </dependency>
+
+        <!-- SLF4J API — needed only to reference Logger/LoggerFactory in generated code references -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- JDK compiler tools (provided by the JDK, not a Maven artifact) -->
+        <!-- For Java 8, tools.jar is used directly; for Java 9+, jdk.compiler module is used -->
+        <!-- No explicit Maven dependency needed — the JDK provides these APIs -->
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>8</source>
+                    <target>8</target>
+                    <!-- Disable annotation processing of this module itself to avoid bootstrap issues -->
+                    <compilerArgument>-proc:none</compilerArgument>
+                    <!--
+                      For Java 9+: the -J prefix passes these flags to the JVM that *runs* javac
+                      (rather than to javac itself). This is compatible with -source/-target 8
+                      and gives the compiler JVM access to jdk.compiler internals.
+                      On Java 8 these -J flags are silently ignored by older javac.
+                    -->
+                    <compilerArgs>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

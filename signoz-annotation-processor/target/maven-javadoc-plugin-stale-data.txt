@@ -1,0 +1,49 @@
+@options
+@packages
+-classpath
+'/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/signoz-annotations-1.0.0.jar:/Users/rylxes/.m2/repository/org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36.jar'
+-encoding
+'UTF-8'
+-protected
+-source
+'8'
+-sourcepath
+'/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotation-processor/src/main/java:/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotation-processor/target/generated-sources/annotations'
+-author
+-bottom
+'Copyright &#169; 2026. All rights reserved.'
+-charset
+'UTF-8'
+-d
+'/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotation-processor/target/apidocs'
+-docencoding
+'UTF-8'
+-Xdoclint:none
+-doctitle
+'SigNoz Annotation Processor 1.0.0 API'
+-linkoffline
+'https://docs.oracle.com/javase/8/docs/api' '/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotation-processor/target/javadoc-bundle-options'
+-linkoffline
+'https://github.com/rylxes/signoz-spring-boot-starter/signoz-annotations/apidocs' '/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/apidocs'
+-use
+-version
+-windowtitle
+'SigNoz Annotation Processor 1.0.0 API'
+io.signoz.springboot.processor
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotations/target/signoz-annotations-1.0.0.jar = 1772965311274
+/Users/rylxes/.m2/repository/org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36.jar = 1653338667161
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotation-processor/src/main/java = 1771975839189
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotation-processor/target/generated-sources/annotations = 1772965312962
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotation-processor/target/apidocs/tag-search-index.js = 1772965313607
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotation-processor/target/apidocs/overview-tree.html = 1772965313601
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotation-processor/target/apidocs/module-search-index.js = 1772965313607
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotation-processor/target/apidocs/index.html = 1772965313612
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotation-processor/target/apidocs/package-search-index.js = 1772965313607
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotation-processor/target/apidocs/index-all.html = 1772965313610
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotation-processor/target/apidocs/allpackages-index.html = 1772965313606
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotation-processor/target/apidocs/member-search-index.js = 1772965313607
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotation-processor/target/apidocs/help-doc.html = 1772965313616
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotation-processor/target/apidocs/element-list = 1772965313585
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotation-processor/target/apidocs/search.html = 1772965313611
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotation-processor/target/apidocs/allclasses-index.html = 1772965313605
+/Users/rylxes/WebDevelopment/Plugins/Spring Boot/Signoz/signoz-annotation-processor/target/apidocs/type-search-index.js = 1772965313607
