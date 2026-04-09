@@ -111,6 +111,93 @@ signoz:
 
 ---
 
+## Method profiling properties (`signoz.timed.*`)
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `signoz.timed.enabled` | `boolean` | `true` | Enable/disable `@Timed` method profiling. |
+| `signoz.timed.slow-threshold-ms` | `long` | `1000` | Methods exceeding this duration (in ms) are logged at WARN. |
+
+---
+
+## Alert properties (`signoz.alerts.*`)
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `signoz.alerts.enabled` | `boolean` | `true` | Enable/disable `@AlertOnFailure` counter metrics. |
+
+---
+
+## Outbound HTTP properties (`signoz.outbound.*`)
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `signoz.outbound.enabled` | `boolean` | `true` | Enable/disable outbound HTTP tracing for RestTemplate/WebClient. |
+| `signoz.outbound.log-requests` | `boolean` | `true` | Log outbound HTTP method, URL, status, and duration. |
+| `signoz.outbound.propagate-headers` | `boolean` | `true` | Inject W3C `traceparent` header into outbound requests. |
+
+---
+
+## Messaging properties (`signoz.messaging.*`)
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `signoz.messaging.enabled` | `boolean` | `true` | Enable/disable Kafka trace propagation interceptors. |
+| `signoz.messaging.propagate-trace` | `boolean` | `true` | Inject/extract `traceId` in Kafka record headers. |
+
+---
+
+## Database properties (`signoz.database.*`)
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `signoz.database.enabled` | `boolean` | `true` | Enable/disable slow query detection. |
+| `signoz.database.slow-query-threshold-ms` | `long` | `500` | Queries exceeding this duration (ms) are logged at WARN. |
+| `signoz.database.log-all-queries` | `boolean` | `false` | Log every query at INFO level (use in development only). |
+| `signoz.database.max-query-length` | `int` | `1000` | Max SQL length in log output. Longer queries are truncated. |
+
+---
+
+## User context properties (`signoz.user-context.*`)
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `signoz.user-context.enabled` | `boolean` | `true` | Enable/disable user context enrichment from SecurityContext. |
+| `signoz.user-context.extract-email` | `boolean` | `true` | Extract user email and add to MDC as `userEmail`. |
+| `signoz.user-context.extract-roles` | `boolean` | `true` | Extract user roles and add to MDC as `userRoles`. |
+| `signoz.user-context.principal-field` | `String` | `email` | Field name on the principal object to extract as `userId`. |
+
+> Requires Spring Security on the classpath. Uses reflection — no hard dependency.
+
+---
+
+## Error fingerprinting properties (`signoz.errors.*`)
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `signoz.errors.enabled` | `boolean` | `true` | Enable/disable error fingerprinting. |
+| `signoz.errors.fingerprint-depth` | `int` | `3` | Number of stack frames included in the fingerprint hash. |
+
+---
+
+## Async properties (`signoz.async.*`)
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `signoz.async.enabled` | `boolean` | `true` | Enable/disable automatic MDC propagation to `@Async` worker threads. |
+
+---
+
+## Log sampling properties (`signoz.logging.sampling.*`)
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `signoz.logging.sampling.enabled` | `boolean` | `false` | Enable log sampling (opt-in). When disabled, all logs pass. |
+| `signoz.logging.sampling.rate` | `double` | `1.0` | Sampling probability: `1.0` = all pass, `0.1` = 10% pass. |
+| `signoz.logging.sampling.always-log-levels` | `List<String>` | `[ERROR, WARN]` | Log levels that always pass regardless of sampling rate. |
+
+---
+
 ## Full `application.yml` example
 
 ```yaml
@@ -119,6 +206,8 @@ signoz:
   service-name: payment-service
   service-version: 2.1.0
   environment: production
+  headers:
+    signoz-ingestion-key: <your-key>  # for SigNoz Cloud
 
   logging:
     mode: BOTH
@@ -134,10 +223,16 @@ signoz:
         regex: "api_token=[A-Za-z0-9_-]+"
     include-mdc: true
     include-caller-data: false
+    sampling:
+      enabled: true
+      rate: 0.1              # keep 10% of INFO/DEBUG logs
+      always-log-levels:
+        - ERROR
+        - WARN
 
   tracing:
     enabled: true
-    sample-rate: 0.1        # sample 10% in production
+    sample-rate: 0.1          # sample 10% of traces in production
     propagation: W3C
     export-timeout-ms: 5000
     export-schedule-delay-ms: 1000
@@ -158,4 +253,38 @@ signoz:
     capture-args: true
     capture-result: false
     include-thread: false
+
+  timed:
+    enabled: true
+    slow-threshold-ms: 500
+
+  alerts:
+    enabled: true
+
+  outbound:
+    enabled: true
+    log-requests: true
+    propagate-headers: true
+
+  messaging:
+    enabled: true
+    propagate-trace: true
+
+  database:
+    enabled: true
+    slow-query-threshold-ms: 500
+    log-all-queries: false
+    max-query-length: 1000
+
+  user-context:
+    enabled: true
+    extract-email: true
+    extract-roles: true
+
+  errors:
+    enabled: true
+    fingerprint-depth: 3
+
+  async:
+    enabled: true
 ```

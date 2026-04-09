@@ -18,15 +18,25 @@ audit trails, and JVM/HTTP metrics — with no code changes required.
 
 | Feature | How it works |
 |---------|-------------|
-| **Structured logging** | JSON output via `SigNozJsonEncoder` (extends Logstash Encoder) |
+| **Structured logging** | JSON output via `SigNozJsonEncoder` — works out of the box, no `logback.xml` needed |
 | **OTLP log export** | `OtlpLogbackAppender` ships logs directly to SigNoz collector |
 | **Field masking** | `@Masked` on parameters; built-in rules for passwords, tokens, credit cards, SSNs |
 | **Distributed tracing** | `@Traced` creates OpenTelemetry spans; trace-ID injected into MDC automatically |
 | **HTTP logging** | `HttpLoggingFilter` logs method, path, status, duration for every request |
-| **Trace-ID correlation** | `TraceIdMdcFilter` injects `traceId`, `spanId`, `X-Request-ID` per request |
+| **Trace-ID correlation** | `TraceIdMdcFilter` injects `traceId`, `spanId`, `requestId` per request |
 | **Audit trail** | `@AuditLog` publishes a structured `AuditEvent` (actor, action, outcome, args) |
 | **JVM + HTTP metrics** | Micrometer OTLP registry sends metrics to SigNoz automatically |
 | **Compile-time logger** | `@SigNozLog` injects `private static final Logger log` via APT (like `@Slf4j`) |
+| **Method profiling** | `@Timed` logs method duration, WARN for slow methods, publishes Micrometer Timer |
+| **Alert on failure** | `@AlertOnFailure` increments a Micrometer Counter when a method throws |
+| **Outbound HTTP tracing** | Auto-injects `traceparent` into RestTemplate/WebClient calls, logs outbound requests |
+| **Kafka trace propagation** | Producer/Consumer interceptors propagate `traceId` via Kafka record headers |
+| **Slow query detection** | DataSource proxy times SQL queries, WARN above threshold (default 500ms) |
+| **Startup diagnostics** | Logs full config summary at boot — what's enabled, endpoints, thresholds |
+| **User context enrichment** | Extracts `userId`/`userEmail`/`userRoles` from SecurityContext into MDC |
+| **Error fingerprinting** | SHA-256 hash of exception type + stack → stable `errorId` in MDC for grouping |
+| **Async context propagation** | `TracingTaskDecorator` copies MDC (traceId, requestId) to `@Async` worker threads |
+| **Log sampling** | Probabilistic filtering — reduce INFO volume while ERROR/WARN always pass |
 
 ---
 
@@ -41,7 +51,7 @@ Pick the artifact that matches your Spring Boot version:
 <dependency>
     <groupId>io.github.rylxes</groupId>
     <artifactId>signoz-spring-boot2-starter</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.2</version>
 </dependency>
 ```
 
@@ -50,7 +60,7 @@ Pick the artifact that matches your Spring Boot version:
 <dependency>
     <groupId>io.github.rylxes</groupId>
     <artifactId>signoz-spring-boot3-starter</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.2</version>
 </dependency>
 ```
 
@@ -246,6 +256,177 @@ Listen to `AuditEvent` in your own `@EventListener` to add custom handling.
 
 ---
 
+### `@Timed` — Method profiling
+
+Measure any method's execution time. Logs duration at INFO, WARN for slow methods,
+and optionally publishes a Micrometer Timer metric.
+
+```java
+@Timed("checkout.process")
+public Order checkout(Cart cart) {
+    // Logs: [SigNoz] Timed checkout.process completed in 142ms
+    // If > 1000ms: [SigNoz] SLOW method checkout.process took 2341ms (threshold: 1000ms)
+    return orderService.create(cart);
+}
+```
+
+Configure the slow threshold:
+
+```yaml
+signoz:
+  timed:
+    slow-threshold-ms: 500   # default: 1000
+```
+
+---
+
+### `@AlertOnFailure` — Failure metrics
+
+Increment a Micrometer Counter every time a method throws an exception.
+Use SigNoz dashboards to alert on counter spikes.
+
+```java
+@AlertOnFailure(metric = "payment.failures")
+public PaymentResult charge(String cardToken, BigDecimal amount) {
+    // On exception: counter "payment.failures" incremented with tags
+    // class=PaymentService, method=charge, exception=PaymentDeclinedException
+    return gateway.charge(cardToken, amount);
+}
+```
+
+---
+
+## Outbound HTTP Tracing
+
+RestTemplate and WebClient calls are automatically traced. The starter injects
+a `traceparent` header (W3C format) and logs every outbound request.
+
+```
+[SigNoz] Outbound GET https://api.example.com/users/123 -> 200 in 87ms
+```
+
+```yaml
+signoz:
+  outbound:
+    enabled: true           # default
+    log-requests: true      # log outbound calls
+    propagate-headers: true # inject traceparent
+```
+
+---
+
+## Kafka Trace Propagation
+
+The starter provides Kafka interceptors that propagate `traceId` across message queues.
+
+Add them to your Kafka producer/consumer config:
+
+```yaml
+spring:
+  kafka:
+    producer:
+      properties:
+        interceptor.classes: io.signoz.springboot.messaging.TracingProducerInterceptor
+    consumer:
+      properties:
+        interceptor.classes: io.signoz.springboot.messaging.TracingConsumerInterceptor
+```
+
+The producer injects `traceId`, `spanId`, and `traceparent` into Kafka record headers.
+The consumer extracts them into MDC so all downstream logs are correlated.
+
+---
+
+## Slow Query Detection
+
+Automatically wraps your `DataSource` to time every SQL query. Queries exceeding
+the threshold are logged at WARN with the SQL and duration.
+
+```
+[SigNoz] SLOW QUERY (1247ms > 500ms): SELECT * FROM transactions WHERE created_at > ?
+```
+
+```yaml
+signoz:
+  database:
+    enabled: true
+    slow-query-threshold-ms: 500  # default
+    log-all-queries: false        # set true for development
+    max-query-length: 1000        # truncate long SQL in logs
+```
+
+---
+
+## Error Fingerprinting
+
+When logging at ERROR level with a throwable, a stable `errorId` is added to MDC.
+This is a SHA-256 hash of the exception type + top N stack frames, allowing you
+to group identical errors in SigNoz dashboards.
+
+```yaml
+signoz:
+  errors:
+    enabled: true
+    fingerprint-depth: 3  # number of stack frames to hash
+```
+
+---
+
+## Async Context Propagation
+
+`@Async` methods and `ExecutorService` tasks lose MDC context (traceId, requestId)
+when switching threads. The starter provides `TracingTaskDecorator` that automatically
+copies MDC to worker threads.
+
+```yaml
+signoz:
+  async:
+    enabled: true  # auto-configures TaskExecutorCustomizer
+```
+
+For raw `ExecutorService`, wrap it manually:
+
+```java
+ExecutorService traced = new TracingExecutorService(Executors.newFixedThreadPool(10));
+```
+
+---
+
+## Log Sampling
+
+Reduce log volume in high-traffic production environments. ERROR and WARN always
+pass; other levels are sampled probabilistically.
+
+```yaml
+signoz:
+  logging:
+    sampling:
+      enabled: true
+      rate: 0.1                    # keep 10% of INFO/DEBUG logs
+      always-log-levels:
+        - ERROR
+        - WARN
+```
+
+---
+
+## User Context Enrichment
+
+Automatically extracts user information from Spring Security's `SecurityContext`
+and adds it to MDC. Every log line then includes `userId`, `userEmail`, `userRoles`.
+
+```yaml
+signoz:
+  user-context:
+    enabled: true
+    extract-email: true
+    extract-roles: true
+```
+
+> Requires Spring Security on the classpath. Uses reflection — no hard dependency.
+
+---
+
 ## HTTP Logging
 
 `HttpLoggingFilter` automatically logs every inbound HTTP request and response. Each log entry includes:
@@ -291,12 +472,19 @@ All features can be disabled independently:
 | `signoz.web.log-requests` | `true` | Disables HTTP request/response logging |
 | `signoz.audit.enabled` | `true` | Disables `@AuditLog` aspect and handler |
 
-Additional properties:
+Additional feature toggles:
 
-| Property | Default | Purpose |
-|----------|---------|---------|
-| `signoz.headers` | `{}` | Custom OTLP export headers (e.g. `signoz-ingestion-key` for SigNoz Cloud) |
-| `signoz.logging.mode` | `BOTH` | Logging output: `OTLP`, `JSON`, or `BOTH` |
+| Property | Default | Effect when `false` |
+|----------|---------|---------------------|
+| `signoz.timed.enabled` | `true` | Disables `@Timed` profiling |
+| `signoz.alerts.enabled` | `true` | Disables `@AlertOnFailure` counters |
+| `signoz.outbound.enabled` | `true` | Disables outbound HTTP tracing |
+| `signoz.messaging.enabled` | `true` | Disables Kafka trace propagation |
+| `signoz.database.enabled` | `true` | Disables slow query detection |
+| `signoz.user-context.enabled` | `true` | Disables user context enrichment |
+| `signoz.errors.enabled` | `true` | Disables error fingerprinting |
+| `signoz.async.enabled` | `true` | Disables async MDC propagation |
+| `signoz.logging.sampling.enabled` | `false` | Enables log sampling (opt-in) |
 
 ---
 
