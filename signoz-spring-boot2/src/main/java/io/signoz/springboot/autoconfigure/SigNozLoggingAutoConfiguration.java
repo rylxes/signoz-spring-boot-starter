@@ -6,6 +6,8 @@ import io.signoz.springboot.logging.SigNozJsonEncoder;
 import io.signoz.springboot.masking.MaskingRegistry;
 import io.signoz.springboot.properties.SigNozLoggingProperties;
 import io.signoz.springboot.properties.SigNozProperties;
+import net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder;
+import net.logstash.logback.composite.loggingevent.MdcJsonProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.SmartInitializingSingleton;
@@ -15,6 +17,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.core.Appender;
+
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.List;
 
 /**
  * Auto-configures the SigNoz logging pipeline:
@@ -66,6 +73,12 @@ public class SigNozLoggingAutoConfiguration {
         return () -> configureLogback(maskingRegistry);
     }
 
+    /** MDC keys to auto-inject into JSON log output for trace correlation. */
+    private static final List<String> TRACE_MDC_KEYS = Arrays.asList(
+            "traceId", "spanId", "traceFlags", "requestId",
+            "trace_id", "span_id"  // OTEL agent uses underscored keys
+    );
+
     private void configureLogback(MaskingRegistry maskingRegistry) {
         SigNozLoggingProperties loggingProps = props.getLogging();
         SigNozLoggingProperties.LoggingMode mode = loggingProps.getMode();
@@ -74,6 +87,9 @@ public class SigNozLoggingAutoConfiguration {
             LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
             ch.qos.logback.classic.Logger rootLogger =
                     context.getLogger(ch.qos.logback.classic.Logger.ROOT_LOGGER_NAME);
+
+            // --- Auto-inject MDC trace fields into existing JSON appenders ---
+            injectMdcProviders(rootLogger, context);
 
             boolean otlp = mode == SigNozLoggingProperties.LoggingMode.OTLP
                     || mode == SigNozLoggingProperties.LoggingMode.BOTH;
@@ -98,6 +114,49 @@ public class SigNozLoggingAutoConfiguration {
 
         } catch (Exception e) {
             log.warn("[SigNoz] Could not configure Logback programmatically: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Walks all appenders on the root logger and injects an {@link MdcJsonProvider}
+     * for trace correlation keys into any {@link LoggingEventCompositeJsonEncoder}.
+     * This ensures traceId/requestId appear in JSON logs without the user modifying
+     * their logback.xml.
+     */
+    private void injectMdcProviders(ch.qos.logback.classic.Logger rootLogger,
+                                    LoggerContext context) {
+        try {
+            Iterator<Appender<ch.qos.logback.classic.spi.ILoggingEvent>> it =
+                    rootLogger.iteratorForAppenders();
+            while (it.hasNext()) {
+                Appender<ch.qos.logback.classic.spi.ILoggingEvent> appender = it.next();
+                if (appender instanceof ch.qos.logback.core.OutputStreamAppender) {
+                    ch.qos.logback.core.OutputStreamAppender<?> osa =
+                            (ch.qos.logback.core.OutputStreamAppender<?>) appender;
+                    ch.qos.logback.core.encoder.Encoder<?> encoder = osa.getEncoder();
+
+                    if (encoder instanceof LoggingEventCompositeJsonEncoder) {
+                        LoggingEventCompositeJsonEncoder composite =
+                                (LoggingEventCompositeJsonEncoder) encoder;
+                        // Check if an MdcJsonProvider is already present
+                        boolean hasMdc = composite.getProviders().getProviders().stream()
+                                .anyMatch(p -> p instanceof MdcJsonProvider);
+                        if (!hasMdc) {
+                            MdcJsonProvider mdcProvider = new MdcJsonProvider();
+                            for (String key : TRACE_MDC_KEYS) {
+                                mdcProvider.addIncludeMdcKeyName(key);
+                            }
+                            mdcProvider.setContext(context);
+                            mdcProvider.start();
+                            composite.getProviders().addProvider(mdcProvider);
+                            log.info("[SigNoz] Injected MDC trace fields into appender '{}'",
+                                    appender.getName());
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("[SigNoz] Could not inject MDC providers: {}", e.getMessage());
         }
     }
 }
