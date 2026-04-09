@@ -30,6 +30,14 @@ public class SigNozJsonEncoder extends LogstashEncoder {
 
     private MaskingRegistry maskingRegistry;
 
+    public SigNozJsonEncoder() {
+        // Exclude Spring Boot's logback context properties from JSON output
+        // (CONSOLE_LOG_PATTERN, FILE_LOG_PATTERN, PID, etc.)
+        setIncludeContext(false);
+        // Exclude "@version":"1" — not useful for SigNoz
+        setVersion(null);
+    }
+
     /**
      * Called by the auto-configuration to inject the masking registry.
      * When used via XML, configure the registry via a Spring bean reference.
