@@ -49,6 +49,7 @@ public class TraceIdMdcFilter extends OncePerRequestFilter {
         // Set X-Request-ID response header for client-side correlation
         response.setHeader("X-Request-ID", requestId);
 
+        // Use real OTEL trace ID when agent is present, otherwise fall back to requestId
         Span currentSpan = Span.current();
         if (currentSpan != null) {
             SpanContext ctx = currentSpan.getSpanContext();
@@ -56,7 +57,12 @@ public class TraceIdMdcFilter extends OncePerRequestFilter {
                 MDC.put("traceId", ctx.getTraceId());
                 MDC.put("spanId", ctx.getSpanId());
                 MDC.put("traceFlags", ctx.getTraceFlags().asHex());
+            } else {
+                // No active span (no OTEL agent) — use requestId as traceId fallback
+                MDC.put("traceId", requestId);
             }
+        } else {
+            MDC.put("traceId", requestId);
         }
 
         try {
