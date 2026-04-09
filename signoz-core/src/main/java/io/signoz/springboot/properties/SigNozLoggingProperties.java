@@ -1,6 +1,7 @@
 package io.signoz.springboot.properties;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -64,6 +65,9 @@ public class SigNozLoggingProperties {
     /** Whether to include caller (class + line) info. Slightly expensive. Default: {@code false}. */
     private boolean includeCallerData = false;
 
+    @NestedConfigurationProperty
+    private SigNozSamplingProperties sampling = new SigNozSamplingProperties();
+
     // --- Nested type ---
 
     public static class PatternConfig {
@@ -102,4 +106,7 @@ public class SigNozLoggingProperties {
     public void setIncludeCallerData(boolean includeCallerData) {
         this.includeCallerData = includeCallerData;
     }
+
+    public SigNozSamplingProperties getSampling() { return sampling; }
+    public void setSampling(SigNozSamplingProperties sampling) { this.sampling = sampling; }
 }

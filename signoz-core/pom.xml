@@ -131,6 +131,46 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Micrometer core (optional — for @Timed metrics support) -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <version>1.12.3</version>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Spring Web (optional — for outbound HTTP tracing) -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+            <version>5.3.31</version>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Spring WebFlux (optional — for reactive WebClient tracing) -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webflux</artifactId>
+            <version>5.3.31</version>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Reactor Core (optional — required by WebFlux filter) -->
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-core</artifactId>
+            <version>3.4.34</version>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Kafka clients (optional — for messaging tracing) -->
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+            <version>3.6.1</version>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>

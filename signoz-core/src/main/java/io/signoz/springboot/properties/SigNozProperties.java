@@ -62,6 +62,30 @@ public class SigNozProperties {
     @NestedConfigurationProperty
     private SigNozAuditProperties audit = new SigNozAuditProperties();
 
+    @NestedConfigurationProperty
+    private SigNozTimedProperties timed = new SigNozTimedProperties();
+
+    @NestedConfigurationProperty
+    private SigNozOutboundProperties outbound = new SigNozOutboundProperties();
+
+    @NestedConfigurationProperty
+    private SigNozMessagingProperties messaging = new SigNozMessagingProperties();
+
+    @NestedConfigurationProperty
+    private SigNozDatabaseProperties database = new SigNozDatabaseProperties();
+
+    @NestedConfigurationProperty
+    private SigNozUserContextProperties userContext = new SigNozUserContextProperties();
+
+    @NestedConfigurationProperty
+    private SigNozAlertProperties alerts = new SigNozAlertProperties();
+
+    @NestedConfigurationProperty
+    private SigNozErrorProperties errors = new SigNozErrorProperties();
+
+    @NestedConfigurationProperty
+    private SigNozAsyncProperties async = new SigNozAsyncProperties();
+
     // --- Getters & Setters ---
 
     public boolean isEnabled() { return enabled; }
@@ -93,4 +117,28 @@ public class SigNozProperties {
 
     public SigNozAuditProperties getAudit() { return audit; }
     public void setAudit(SigNozAuditProperties audit) { this.audit = audit; }
+
+    public SigNozTimedProperties getTimed() { return timed; }
+    public void setTimed(SigNozTimedProperties timed) { this.timed = timed; }
+
+    public SigNozOutboundProperties getOutbound() { return outbound; }
+    public void setOutbound(SigNozOutboundProperties outbound) { this.outbound = outbound; }
+
+    public SigNozMessagingProperties getMessaging() { return messaging; }
+    public void setMessaging(SigNozMessagingProperties messaging) { this.messaging = messaging; }
+
+    public SigNozDatabaseProperties getDatabase() { return database; }
+    public void setDatabase(SigNozDatabaseProperties database) { this.database = database; }
+
+    public SigNozUserContextProperties getUserContext() { return userContext; }
+    public void setUserContext(SigNozUserContextProperties userContext) { this.userContext = userContext; }
+
+    public SigNozAlertProperties getAlerts() { return alerts; }
+    public void setAlerts(SigNozAlertProperties alerts) { this.alerts = alerts; }
+
+    public SigNozErrorProperties getErrors() { return errors; }
+    public void setErrors(SigNozErrorProperties errors) { this.errors = errors; }
+
+    public SigNozAsyncProperties getAsync() { return async; }
+    public void setAsync(SigNozAsyncProperties async) { this.async = async; }
 }

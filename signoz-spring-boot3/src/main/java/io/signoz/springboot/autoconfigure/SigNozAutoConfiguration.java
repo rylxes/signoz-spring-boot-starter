@@ -1,9 +1,18 @@
 package io.signoz.springboot.autoconfigure;
 
+import io.signoz.springboot.properties.SigNozAlertProperties;
+import io.signoz.springboot.properties.SigNozAsyncProperties;
 import io.signoz.springboot.properties.SigNozAuditProperties;
+import io.signoz.springboot.properties.SigNozDatabaseProperties;
+import io.signoz.springboot.properties.SigNozErrorProperties;
 import io.signoz.springboot.properties.SigNozLoggingProperties;
+import io.signoz.springboot.properties.SigNozMessagingProperties;
+import io.signoz.springboot.properties.SigNozOutboundProperties;
 import io.signoz.springboot.properties.SigNozProperties;
+import io.signoz.springboot.properties.SigNozSamplingProperties;
+import io.signoz.springboot.properties.SigNozTimedProperties;
 import io.signoz.springboot.properties.SigNozTracingProperties;
+import io.signoz.springboot.properties.SigNozUserContextProperties;
 import io.signoz.springboot.properties.SigNozWebProperties;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -23,14 +32,31 @@ import org.springframework.context.annotation.Import;
         SigNozLoggingProperties.class,
         SigNozTracingProperties.class,
         SigNozWebProperties.class,
-        SigNozAuditProperties.class
+        SigNozAuditProperties.class,
+        SigNozTimedProperties.class,
+        SigNozOutboundProperties.class,
+        SigNozMessagingProperties.class,
+        SigNozDatabaseProperties.class,
+        SigNozUserContextProperties.class,
+        SigNozAlertProperties.class,
+        SigNozErrorProperties.class,
+        SigNozAsyncProperties.class,
+        SigNozSamplingProperties.class
 })
 @Import({
         SigNozLoggingAutoConfiguration.class,
         SigNozTracingAutoConfiguration.class,
         SigNozWebAutoConfiguration.class,
         SigNozAuditAutoConfiguration.class,
-        SigNozMetricsAutoConfiguration.class
+        SigNozMetricsAutoConfiguration.class,
+        SigNozTimedAutoConfiguration.class,
+        SigNozAlertAutoConfiguration.class,
+        SigNozOutboundAutoConfiguration.class,
+        SigNozMessagingAutoConfiguration.class,
+        SigNozDatabaseAutoConfiguration.class,
+        SigNozUserContextAutoConfiguration.class,
+        SigNozAsyncAutoConfiguration.class,
+        SigNozDiagnosticsAutoConfiguration.class
 })
 public class SigNozAutoConfiguration {
 }

@@ -1,11 +1,15 @@
 package io.signoz.springboot.autoconfigure;
 
 import io.signoz.springboot.detect.AgentDetector;
+import io.signoz.springboot.errors.ErrorFingerprintTurboFilter;
 import io.signoz.springboot.logging.OtlpLogbackAppender;
+import io.signoz.springboot.logging.SamplingTurboFilter;
 import io.signoz.springboot.logging.SigNozJsonEncoder;
 import io.signoz.springboot.masking.MaskingRegistry;
+import io.signoz.springboot.properties.SigNozErrorProperties;
 import io.signoz.springboot.properties.SigNozLoggingProperties;
 import io.signoz.springboot.properties.SigNozProperties;
+import io.signoz.springboot.properties.SigNozSamplingProperties;
 import net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder;
 import net.logstash.logback.encoder.LogstashEncoder;
 import net.logstash.logback.composite.loggingevent.MdcJsonProvider;
@@ -119,6 +123,29 @@ public class SigNozLoggingAutoConfiguration {
                     rootLogger.addAppender(otlpAppender);
                     log.info("[SigNoz] OTLP log appender attached → {}", props.getEndpoint());
                 }
+            }
+
+            // Error fingerprinting
+            SigNozErrorProperties errorProps = props.getErrors();
+            if (errorProps != null && errorProps.isEnabled()) {
+                ErrorFingerprintTurboFilter errorFilter = new ErrorFingerprintTurboFilter();
+                errorFilter.setFingerprintDepth(errorProps.getFingerprintDepth());
+                errorFilter.setContext(context);
+                errorFilter.start();
+                context.addTurboFilter(errorFilter);
+                log.info("[SigNoz] Error fingerprinting enabled (depth: {})", errorProps.getFingerprintDepth());
+            }
+
+            // Log sampling
+            SigNozSamplingProperties samplingProps = props.getLogging().getSampling();
+            if (samplingProps != null && samplingProps.isEnabled()) {
+                SamplingTurboFilter samplingFilter = new SamplingTurboFilter();
+                samplingFilter.setRate(samplingProps.getRate());
+                samplingFilter.setAlwaysLogLevels(samplingProps.getAlwaysLogLevels());
+                samplingFilter.setContext(context);
+                samplingFilter.start();
+                context.addTurboFilter(samplingFilter);
+                log.info("[SigNoz] Log sampling enabled (rate: {}, always: {})", samplingProps.getRate(), samplingProps.getAlwaysLogLevels());
             }
 
         } catch (Exception e) {

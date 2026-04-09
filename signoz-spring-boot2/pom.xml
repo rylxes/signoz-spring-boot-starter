@@ -63,10 +63,19 @@
             <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
 
-        <!-- Logstash Logback Encoder (needed by SigNozJsonEncoder) -->
+        <!-- Logstash Logback Encoder (needed by SigNozJsonEncoder).
+             Override to 7.3 for SB2 compatibility (7.4 requires logback 1.3+). -->
         <dependency>
             <groupId>net.logstash.logback</groupId>
             <artifactId>logstash-logback-encoder</artifactId>
+            <version>7.3</version>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Spring WebFlux (optional — for WebClient tracing) -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webflux</artifactId>
             <optional>true</optional>
         </dependency>
 

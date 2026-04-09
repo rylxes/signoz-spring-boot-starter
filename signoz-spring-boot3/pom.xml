@@ -84,6 +84,13 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Spring WebFlux (optional — for WebClient tracing) -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webflux</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Config processor for IDE autocomplete -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
