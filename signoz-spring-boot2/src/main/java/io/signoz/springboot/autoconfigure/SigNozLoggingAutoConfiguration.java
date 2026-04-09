@@ -7,6 +7,7 @@ import io.signoz.springboot.masking.MaskingRegistry;
 import io.signoz.springboot.properties.SigNozLoggingProperties;
 import io.signoz.springboot.properties.SigNozProperties;
 import net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder;
+import net.logstash.logback.encoder.LogstashEncoder;
 import net.logstash.logback.composite.loggingevent.MdcJsonProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -88,6 +89,14 @@ public class SigNozLoggingAutoConfiguration {
             ch.qos.logback.classic.Logger rootLogger =
                     context.getLogger(ch.qos.logback.classic.Logger.ROOT_LOGGER_NAME);
 
+            boolean json = mode == SigNozLoggingProperties.LoggingMode.JSON
+                    || mode == SigNozLoggingProperties.LoggingMode.BOTH;
+
+            // --- Ensure a JSON console appender exists ---
+            if (json) {
+                ensureJsonAppender(rootLogger, context, maskingRegistry);
+            }
+
             // --- Auto-inject MDC trace fields into existing JSON appenders ---
             injectMdcProviders(rootLogger, context);
 
@@ -157,6 +166,64 @@ public class SigNozLoggingAutoConfiguration {
             }
         } catch (Exception e) {
             log.debug("[SigNoz] Could not inject MDC providers: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Ensures a JSON console appender exists on the root logger. If no appender
+     * uses a {@link LogstashEncoder} or {@link LoggingEventCompositeJsonEncoder},
+     * replaces the default console appender with a {@link SigNozJsonEncoder}-backed one.
+     * This lets the starter work out of the box without a logback.xml.
+     */
+    private void ensureJsonAppender(ch.qos.logback.classic.Logger rootLogger,
+                                    LoggerContext context,
+                                    MaskingRegistry maskingRegistry) {
+        try {
+            // Check if any appender already uses a JSON encoder
+            boolean hasJsonEncoder = false;
+            Iterator<Appender<ch.qos.logback.classic.spi.ILoggingEvent>> it =
+                    rootLogger.iteratorForAppenders();
+            while (it.hasNext()) {
+                Appender<ch.qos.logback.classic.spi.ILoggingEvent> appender = it.next();
+                if (appender instanceof ch.qos.logback.core.OutputStreamAppender) {
+                    ch.qos.logback.core.encoder.Encoder<?> enc =
+                            ((ch.qos.logback.core.OutputStreamAppender<?>) appender).getEncoder();
+                    if (enc instanceof LogstashEncoder
+                            || enc instanceof LoggingEventCompositeJsonEncoder) {
+                        hasJsonEncoder = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!hasJsonEncoder && rootLogger.getAppender("SIGNOZ_JSON") == null) {
+                // Create a SigNozJsonEncoder (extends LogstashEncoder, includes MDC + masking)
+                SigNozJsonEncoder encoder = new SigNozJsonEncoder();
+                encoder.setMaskingRegistry(maskingRegistry);
+                encoder.setIncludeMdc(true);
+                encoder.setContext(context);
+                encoder.start();
+
+                ch.qos.logback.core.ConsoleAppender<ch.qos.logback.classic.spi.ILoggingEvent>
+                        jsonAppender = new ch.qos.logback.core.ConsoleAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+                jsonAppender.setName("SIGNOZ_JSON");
+                jsonAppender.setContext(context);
+                jsonAppender.setEncoder(encoder);
+                jsonAppender.start();
+
+                // Detach the default console appender and replace with JSON
+                Appender<ch.qos.logback.classic.spi.ILoggingEvent> defaultConsole =
+                        rootLogger.getAppender("CONSOLE");
+                if (defaultConsole != null) {
+                    rootLogger.detachAppender(defaultConsole);
+                    defaultConsole.stop();
+                }
+
+                rootLogger.addAppender(jsonAppender);
+                log.info("[SigNoz] JSON console appender attached (replaced default CONSOLE)");
+            }
+        } catch (Exception e) {
+            log.debug("[SigNoz] Could not ensure JSON appender: {}", e.getMessage());
         }
     }
 }
