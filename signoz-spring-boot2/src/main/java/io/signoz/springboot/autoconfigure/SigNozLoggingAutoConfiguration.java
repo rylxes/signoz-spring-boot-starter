@@ -1,5 +1,6 @@
 package io.signoz.springboot.autoconfigure;
 
+import io.signoz.springboot.detect.AgentDetector;
 import io.signoz.springboot.logging.OtlpLogbackAppender;
 import io.signoz.springboot.logging.SigNozJsonEncoder;
 import io.signoz.springboot.masking.MaskingRegistry;
@@ -78,8 +79,9 @@ public class SigNozLoggingAutoConfiguration {
                     || mode == SigNozLoggingProperties.LoggingMode.BOTH;
 
             if (otlp) {
-                // Only add if not already attached (idempotent)
-                if (rootLogger.getAppender("SIGNOZ_OTLP") == null) {
+                if (AgentDetector.isAgentPresent()) {
+                    log.info("[SigNoz] OpenTelemetry Java Agent detected — skipping OTLP log appender (agent handles log export)");
+                } else if (rootLogger.getAppender("SIGNOZ_OTLP") == null) {
                     OtlpLogbackAppender otlpAppender = new OtlpLogbackAppender();
                     otlpAppender.setName("SIGNOZ_OTLP");
                     otlpAppender.setContext(context);
@@ -87,6 +89,7 @@ public class SigNozLoggingAutoConfiguration {
                     otlpAppender.setServiceName(props.getServiceName());
                     otlpAppender.setServiceVersion(props.getServiceVersion());
                     otlpAppender.setEnvironment(props.getEnvironment());
+                    otlpAppender.setHeaders(props.getHeaders());
                     otlpAppender.start();
                     rootLogger.addAppender(otlpAppender);
                     log.info("[SigNoz] OTLP log appender attached → {}", props.getEndpoint());

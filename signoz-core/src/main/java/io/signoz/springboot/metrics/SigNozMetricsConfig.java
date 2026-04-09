@@ -76,6 +76,12 @@ public class SigNozMetricsConfig {
                 attrs.put("deployment.environment", props.getEnvironment());
                 return attrs;
             }
+
+            @Override
+            public Map<String, String> headers() {
+                Map<String, String> h = props.getHeaders();
+                return (h != null) ? h : new HashMap<String, String>();
+            }
         };
 
         OtlpMeterRegistry registry = new OtlpMeterRegistry(config,

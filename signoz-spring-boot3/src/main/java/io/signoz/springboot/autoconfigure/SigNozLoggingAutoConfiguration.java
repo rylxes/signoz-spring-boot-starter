@@ -1,5 +1,6 @@
 package io.signoz.springboot.autoconfigure;
 
+import io.signoz.springboot.detect.AgentDetector;
 import io.signoz.springboot.logging.OtlpLogbackAppender;
 import io.signoz.springboot.logging.SigNozJsonEncoder;
 import io.signoz.springboot.masking.MaskingRegistry;
@@ -68,17 +69,22 @@ public class SigNozLoggingAutoConfiguration {
             boolean otlp = mode == SigNozLoggingProperties.LoggingMode.OTLP
                     || mode == SigNozLoggingProperties.LoggingMode.BOTH;
 
-            if (otlp && rootLogger.getAppender("SIGNOZ_OTLP") == null) {
-                OtlpLogbackAppender otlpAppender = new OtlpLogbackAppender();
-                otlpAppender.setName("SIGNOZ_OTLP");
-                otlpAppender.setContext(context);
-                otlpAppender.setEndpoint(props.getEndpoint());
-                otlpAppender.setServiceName(props.getServiceName());
-                otlpAppender.setServiceVersion(props.getServiceVersion());
-                otlpAppender.setEnvironment(props.getEnvironment());
-                otlpAppender.start();
-                rootLogger.addAppender(otlpAppender);
-                log.info("[SigNoz] OTLP log appender attached → {}", props.getEndpoint());
+            if (otlp) {
+                if (AgentDetector.isAgentPresent()) {
+                    log.info("[SigNoz] OpenTelemetry Java Agent detected — skipping OTLP log appender (agent handles log export)");
+                } else if (rootLogger.getAppender("SIGNOZ_OTLP") == null) {
+                    OtlpLogbackAppender otlpAppender = new OtlpLogbackAppender();
+                    otlpAppender.setName("SIGNOZ_OTLP");
+                    otlpAppender.setContext(context);
+                    otlpAppender.setEndpoint(props.getEndpoint());
+                    otlpAppender.setServiceName(props.getServiceName());
+                    otlpAppender.setServiceVersion(props.getServiceVersion());
+                    otlpAppender.setEnvironment(props.getEnvironment());
+                    otlpAppender.setHeaders(props.getHeaders());
+                    otlpAppender.start();
+                    rootLogger.addAppender(otlpAppender);
+                    log.info("[SigNoz] OTLP log appender attached → {}", props.getEndpoint());
+                }
             }
         } catch (Exception e) {
             log.warn("[SigNoz] Could not configure Logback programmatically: {}", e.getMessage());

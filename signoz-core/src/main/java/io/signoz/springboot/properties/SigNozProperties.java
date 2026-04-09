@@ -3,6 +3,9 @@ package io.signoz.springboot.properties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * Root configuration properties for the SigNoz Spring Boot Starter.
  *
@@ -34,6 +37,19 @@ public class SigNozProperties {
     /** Deployment environment tag (e.g. {@code "production"}, {@code "staging"}). */
     private String environment = "default";
 
+    /**
+     * Custom headers to send with OTLP export requests.
+     * Used for SigNoz Cloud authentication when the OpenTelemetry Java Agent is not present.
+     * <pre>
+     * signoz:
+     *   headers:
+     *     signoz-ingestion-key: your-key-here
+     * </pre>
+     * When the OTEL Java Agent is active, these headers are ignored (the agent handles auth
+     * via {@code OTEL_EXPORTER_OTLP_HEADERS} env var).
+     */
+    private Map<String, String> headers = new HashMap<String, String>();
+
     @NestedConfigurationProperty
     private SigNozLoggingProperties logging = new SigNozLoggingProperties();
 
@@ -62,6 +78,9 @@ public class SigNozProperties {
 
     public String getEnvironment() { return environment; }
     public void setEnvironment(String environment) { this.environment = environment; }
+
+    public Map<String, String> getHeaders() { return headers; }
+    public void setHeaders(Map<String, String> headers) { this.headers = headers; }
 
     public SigNozLoggingProperties getLogging() { return logging; }
     public void setLogging(SigNozLoggingProperties logging) { this.logging = logging; }

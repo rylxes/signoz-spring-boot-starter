@@ -14,6 +14,7 @@ import io.opentelemetry.sdk.logs.export.BatchLogRecordProcessor;
 import io.opentelemetry.sdk.resources.Resource;
 import io.opentelemetry.semconv.ResourceAttributes;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -50,6 +51,7 @@ public class OtlpLogbackAppender extends AppenderBase<ILoggingEvent> {
     private String serviceVersion = "unknown";
     private String environment = "default";
     private long exportTimeoutMs = 5000L;
+    private Map<String, String> headers = new HashMap<String, String>();
 
     private SdkLoggerProvider loggerProvider;
     private io.opentelemetry.api.logs.Logger otelLogger;
@@ -59,10 +61,16 @@ public class OtlpLogbackAppender extends AppenderBase<ILoggingEvent> {
     @Override
     public void start() {
         try {
-            OtlpGrpcLogRecordExporter exporter = OtlpGrpcLogRecordExporter.builder()
-                    .setEndpoint(endpoint)
-                    .setTimeout(exportTimeoutMs, TimeUnit.MILLISECONDS)
-                    .build();
+            io.opentelemetry.exporter.otlp.logs.OtlpGrpcLogRecordExporterBuilder exporterBuilder =
+                    OtlpGrpcLogRecordExporter.builder()
+                            .setEndpoint(endpoint)
+                            .setTimeout(exportTimeoutMs, TimeUnit.MILLISECONDS);
+            if (headers != null) {
+                for (Map.Entry<String, String> entry : headers.entrySet()) {
+                    exporterBuilder.addHeader(entry.getKey(), entry.getValue());
+                }
+            }
+            OtlpGrpcLogRecordExporter exporter = exporterBuilder.build();
 
             Resource resource = Resource.getDefault().merge(
                     Resource.create(Attributes.of(
@@ -159,4 +167,7 @@ public class OtlpLogbackAppender extends AppenderBase<ILoggingEvent> {
 
     public void setExportTimeoutMs(long exportTimeoutMs) { this.exportTimeoutMs = exportTimeoutMs; }
     public long getExportTimeoutMs() { return exportTimeoutMs; }
+
+    public void setHeaders(Map<String, String> headers) { this.headers = headers; }
+    public Map<String, String> getHeaders() { return headers; }
 }

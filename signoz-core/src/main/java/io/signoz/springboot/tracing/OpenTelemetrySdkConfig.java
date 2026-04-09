@@ -1,5 +1,6 @@
 package io.signoz.springboot.tracing;
 
+import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
@@ -15,6 +16,7 @@ import io.opentelemetry.sdk.resources.Resource;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
 import io.opentelemetry.sdk.trace.samplers.Sampler;
+import io.signoz.springboot.detect.AgentDetector;
 import io.signoz.springboot.properties.SigNozProperties;
 import io.signoz.springboot.properties.SigNozTracingProperties;
 import org.springframework.beans.factory.DisposableBean;
@@ -23,6 +25,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Duration;
+import java.util.Map;
 
 /**
  * Spring {@code @Configuration} that bootstraps the OpenTelemetry SDK and
@@ -48,6 +51,16 @@ public class OpenTelemetrySdkConfig implements DisposableBean {
     @Bean
     @ConditionalOnMissingBean(OpenTelemetry.class)
     public OpenTelemetry openTelemetry() {
+        // If the OTEL Java Agent is running, it already registered a global OpenTelemetry.
+        // Use the agent's instance to avoid duplicate exporters.
+        if (AgentDetector.isAgentPresent()) {
+            try {
+                return GlobalOpenTelemetry.get();
+            } catch (Exception e) {
+                return OpenTelemetry.noop();
+            }
+        }
+
         Resource resource = Resource.getDefault().merge(
                 Resource.create(Attributes.of(
                         AttributeKey.stringKey("service.name"), props.getServiceName(),
@@ -56,12 +69,19 @@ public class OpenTelemetrySdkConfig implements DisposableBean {
                 )));
 
         SigNozTracingProperties tracingProps = props.getTracing();
+        Map<String, String> headers = props.getHeaders();
 
         // --- Tracer Provider ---
-        OtlpGrpcSpanExporter spanExporter = OtlpGrpcSpanExporter.builder()
-                .setEndpoint(props.getEndpoint())
-                .setTimeout(Duration.ofMillis(tracingProps.getExportTimeoutMs()))
-                .build();
+        io.opentelemetry.exporter.otlp.trace.OtlpGrpcSpanExporterBuilder spanBuilder =
+                OtlpGrpcSpanExporter.builder()
+                        .setEndpoint(props.getEndpoint())
+                        .setTimeout(Duration.ofMillis(tracingProps.getExportTimeoutMs()));
+        if (headers != null) {
+            for (Map.Entry<String, String> entry : headers.entrySet()) {
+                spanBuilder.addHeader(entry.getKey(), entry.getValue());
+            }
+        }
+        OtlpGrpcSpanExporter spanExporter = spanBuilder.build();
 
         Sampler sampler = tracingProps.getSampleRate() >= 1.0
                 ? Sampler.alwaysOn()
@@ -77,10 +97,16 @@ public class OpenTelemetrySdkConfig implements DisposableBean {
                 .build();
 
         // --- Meter Provider ---
-        OtlpGrpcMetricExporter metricExporter = OtlpGrpcMetricExporter.builder()
-                .setEndpoint(props.getEndpoint())
-                .setTimeout(Duration.ofMillis(tracingProps.getExportTimeoutMs()))
-                .build();
+        io.opentelemetry.exporter.otlp.metrics.OtlpGrpcMetricExporterBuilder metricBuilder =
+                OtlpGrpcMetricExporter.builder()
+                        .setEndpoint(props.getEndpoint())
+                        .setTimeout(Duration.ofMillis(tracingProps.getExportTimeoutMs()));
+        if (headers != null) {
+            for (Map.Entry<String, String> entry : headers.entrySet()) {
+                metricBuilder.addHeader(entry.getKey(), entry.getValue());
+            }
+        }
+        OtlpGrpcMetricExporter metricExporter = metricBuilder.build();
 
         SdkMeterProvider meterProvider = SdkMeterProvider.builder()
                 .setResource(resource)
