@@ -69,6 +69,75 @@ That's it — all features are on by default.
 
 ---
 
+## OpenTelemetry Java Agent Support
+
+The starter automatically detects the [OpenTelemetry Java Agent](https://opentelemetry.io/docs/zero-code/java/agent/)
+(`opentelemetry-javaagent.jar`). When the agent is present, the starter **defers OTLP export
+to the agent** and focuses on app-level features only.
+
+| Component | Agent present | Agent absent |
+|-----------|:---:|:---:|
+| JSON logging / masking | Active | Active |
+| HTTP request logging | Active | Active |
+| Audit trail (`@AuditLog`) | Active | Active |
+| `@Traced` spans | Uses agent's tracer | Uses starter's tracer |
+| OTLP log export | Skipped (agent handles it) | Active |
+| OTLP trace export | Skipped (agent handles it) | Active |
+| OTLP metrics export | Skipped (agent handles it) | Active |
+
+**Recommended setup** — use the agent as the primary OTLP exporter, with the starter providing
+app-level features:
+
+```dockerfile
+# Dockerfile
+RUN wget https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar
+CMD java -javaagent:opentelemetry-javaagent.jar -jar my-app.jar
+```
+
+```yaml
+# application.yml — no endpoint/headers needed, agent handles export
+signoz:
+  service-name: my-app
+  logging:
+    mask-enabled: true
+```
+
+Set the agent's export config via environment variables (e.g. in K8s):
+
+```yaml
+env:
+  - name: OTEL_EXPORTER_OTLP_ENDPOINT
+    value: "https://ingest.us.signoz.cloud:443"
+  - name: OTEL_EXPORTER_OTLP_HEADERS
+    value: "signoz-ingestion-key=<your-key>"
+  - name: OTEL_SERVICE_NAME
+    value: "my-app"
+```
+
+---
+
+## SigNoz Cloud (without agent)
+
+When running **without** the OTEL agent, the starter exports directly to SigNoz.
+For [SigNoz Cloud](https://signoz.io/docs/cloud/), configure the ingestion endpoint
+and authentication header:
+
+```yaml
+signoz:
+  endpoint: https://ingest.us.signoz.cloud:443
+  service-name: my-app
+  service-version: 1.0.0
+  environment: production
+  headers:
+    signoz-ingestion-key: <your-ingestion-key>
+```
+
+The `signoz.headers` map supports any custom headers. Each header is added to all
+OTLP export requests (logs, traces, and metrics). Find your ingestion key in
+**SigNoz Cloud > Settings > Ingestion**.
+
+---
+
 ## Annotations Guide
 
 ### `@SigNozLog` — Compile-time logger injection
@@ -221,6 +290,13 @@ All features can be disabled independently:
 | `signoz.logging.mask-enabled` | `true` | Disables all field and message masking |
 | `signoz.web.log-requests` | `true` | Disables HTTP request/response logging |
 | `signoz.audit.enabled` | `true` | Disables `@AuditLog` aspect and handler |
+
+Additional properties:
+
+| Property | Default | Purpose |
+|----------|---------|---------|
+| `signoz.headers` | `{}` | Custom OTLP export headers (e.g. `signoz-ingestion-key` for SigNoz Cloud) |
+| `signoz.logging.mode` | `BOTH` | Logging output: `OTLP`, `JSON`, or `BOTH` |
 
 ---
 

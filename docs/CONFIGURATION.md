@@ -15,6 +15,25 @@ need to specify what you want to change.
 | `signoz.service-name` | `String` | `application` | Logical service name shown in SigNoz traces, logs, and metrics. |
 | `signoz.service-version` | `String` | `unknown` | Semantic version string attached to all telemetry (e.g. `1.2.3`). |
 | `signoz.environment` | `String` | `default` | Deployment environment tag (e.g. `production`, `staging`, `dev`). |
+| `signoz.headers` | `Map<String, String>` | `{}` | Custom headers sent with all OTLP export requests. Required for SigNoz Cloud authentication (e.g. `signoz-ingestion-key`). Ignored when the OpenTelemetry Java Agent is active. |
+
+### SigNoz Cloud example
+
+```yaml
+signoz:
+  endpoint: https://ingest.us.signoz.cloud:443
+  service-name: my-app
+  headers:
+    signoz-ingestion-key: <your-ingestion-key>
+```
+
+### OpenTelemetry Java Agent
+
+When `opentelemetry-javaagent.jar` is attached (via `-javaagent:`), the starter automatically
+detects it and **skips its own OTLP export** for logs, traces, and metrics. The agent handles
+all export — configure it via `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS`
+environment variables. App-level features (masking, audit, HTTP logging, JSON formatting)
+remain active.
 
 ---
 
