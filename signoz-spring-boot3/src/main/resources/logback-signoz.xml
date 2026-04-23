@@ -9,7 +9,10 @@
 
     <appender name="SIGNOZ_JSON" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="io.signoz.springboot.logging.SigNozJsonEncoder">
-            <includeContext>true</includeContext>
+            <!-- Excludes Spring Boot's bootstrap LoggerContext properties (CONSOLE_LOG_PATTERN,
+                 FILE_LOG_PATTERN, PID, ...) from every event. Flip to true only if you
+                 intentionally publish custom context properties worth emitting. -->
+            <includeContext>false</includeContext>
             <includeMdc>true</includeMdc>
             <includeStructuredArguments>true</includeStructuredArguments>
             <fieldNames>

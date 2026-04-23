@@ -98,7 +98,7 @@ public class SigNozLoggingAutoConfiguration {
 
             // --- Ensure a JSON console appender exists ---
             if (json) {
-                ensureJsonAppender(rootLogger, context, maskingRegistry);
+                ensureJsonAppender(rootLogger, context, maskingRegistry, loggingProps);
             }
 
             // --- Auto-inject MDC trace fields into existing JSON appenders ---
@@ -204,9 +204,12 @@ public class SigNozLoggingAutoConfiguration {
      */
     private void ensureJsonAppender(ch.qos.logback.classic.Logger rootLogger,
                                     LoggerContext context,
-                                    MaskingRegistry maskingRegistry) {
+                                    MaskingRegistry maskingRegistry,
+                                    SigNozLoggingProperties loggingProps) {
         try {
-            // Check if any appender already uses a JSON encoder
+            // Check if any appender already uses a JSON encoder. If we find one,
+            // also respect the include-context setting on it so users get consistent
+            // output whether they configured their own encoder or rely on ours.
             boolean hasJsonEncoder = false;
             Iterator<Appender<ch.qos.logback.classic.spi.ILoggingEvent>> it =
                     rootLogger.iteratorForAppenders();
@@ -215,8 +218,12 @@ public class SigNozLoggingAutoConfiguration {
                 if (appender instanceof ch.qos.logback.core.OutputStreamAppender) {
                     ch.qos.logback.core.encoder.Encoder<?> enc =
                             ((ch.qos.logback.core.OutputStreamAppender<?>) appender).getEncoder();
-                    if (enc instanceof LogstashEncoder
-                            || enc instanceof LoggingEventCompositeJsonEncoder) {
+                    if (enc instanceof LogstashEncoder) {
+                        ((LogstashEncoder) enc).setIncludeContext(loggingProps.isIncludeContext());
+                        hasJsonEncoder = true;
+                        break;
+                    }
+                    if (enc instanceof LoggingEventCompositeJsonEncoder) {
                         hasJsonEncoder = true;
                         break;
                     }
@@ -224,10 +231,14 @@ public class SigNozLoggingAutoConfiguration {
             }
 
             if (!hasJsonEncoder && rootLogger.getAppender("SIGNOZ_JSON") == null) {
-                // Create a SigNozJsonEncoder (extends LogstashEncoder, includes MDC + masking)
+                // Create a SigNozJsonEncoder (extends LogstashEncoder, includes MDC + masking).
+                // includeContext defaults to false so Spring Boot's bootstrap LoggerContext
+                // properties (CONSOLE_LOG_PATTERN, FILE_LOG_PATTERN, PID, ...) don't leak
+                // into every JSON event. Opt-in via signoz.logging.include-context=true.
                 SigNozJsonEncoder encoder = new SigNozJsonEncoder();
                 encoder.setMaskingRegistry(maskingRegistry);
                 encoder.setIncludeMdc(true);
+                encoder.setIncludeContext(loggingProps.isIncludeContext());
                 encoder.setContext(context);
                 encoder.start();
 

@@ -65,6 +65,19 @@ public class SigNozLoggingProperties {
     /** Whether to include caller (class + line) info. Slightly expensive. Default: {@code false}. */
     private boolean includeCallerData = false;
 
+    /**
+     * Whether to include the Logback {@code LoggerContext} properties as top-level
+     * fields on every JSON log record. Default: {@code false}.
+     *
+     * <p>Spring Boot publishes internal bootstrap variables
+     * ({@code CONSOLE_LOG_PATTERN}, {@code CONSOLE_LOG_CHARSET}, {@code FILE_LOG_PATTERN},
+     * {@code FILE_LOG_CHARSET}, {@code PID}, etc.) into the {@code LoggerContext} so its
+     * default pattern layouts can resolve them. These were never intended as structured
+     * log fields, so we exclude them by default. Set to {@code true} only if you
+     * intentionally publish custom context properties you want emitted on every event.
+     */
+    private boolean includeContext = false;
+
     @NestedConfigurationProperty
     private SigNozSamplingProperties sampling = new SigNozSamplingProperties();
 
@@ -106,6 +119,9 @@ public class SigNozLoggingProperties {
     public void setIncludeCallerData(boolean includeCallerData) {
         this.includeCallerData = includeCallerData;
     }
+
+    public boolean isIncludeContext() { return includeContext; }
+    public void setIncludeContext(boolean includeContext) { this.includeContext = includeContext; }
 
     public SigNozSamplingProperties getSampling() { return sampling; }
     public void setSampling(SigNozSamplingProperties sampling) { this.sampling = sampling; }
