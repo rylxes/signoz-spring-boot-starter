@@ -5,6 +5,7 @@ import io.opentelemetry.api.trace.SpanContext;
 import io.signoz.springboot.properties.SigNozOutboundProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.http.HttpRequest;
 import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
@@ -39,13 +40,15 @@ public class TracingRestTemplateInterceptor implements ClientHttpRequestIntercep
     public ClientHttpResponse intercept(HttpRequest request, byte[] body,
                                         ClientHttpRequestExecution execution) throws IOException {
         if (properties.isPropagateHeaders()) {
-            SpanContext spanContext = Span.current().getSpanContext();
-            if (spanContext.isValid()) {
-                String traceparent = String.format("00-%s-%s-%s",
-                        spanContext.getTraceId(),
-                        spanContext.getSpanId(),
-                        spanContext.getTraceFlags().asHex());
+            String traceparent = buildTraceparent();
+            if (traceparent != null) {
                 request.getHeaders().set("traceparent", traceparent);
+            }
+            // Also forward X-Request-ID so downstream services that don't speak W3C
+            // traceparent still get correlation. MDC is populated by TraceIdMdcFilter.
+            String requestId = MDC.get("requestId");
+            if (requestId != null && !requestId.isEmpty()) {
+                request.getHeaders().set("X-Request-ID", requestId);
             }
         }
 
@@ -73,5 +76,34 @@ public class TracingRestTemplateInterceptor implements ClientHttpRequestIntercep
             }
             throw ex;
         }
+    }
+
+    /**
+     * Build a W3C {@code traceparent} for the outbound request. Prefers the active
+     * OTEL {@link SpanContext} when available (OTEL agent or SDK path); otherwise
+     * falls back to MDC values populated by {@code TraceIdMdcFilter} so header
+     * propagation still works in fully agentless deployments.
+     *
+     * @return the formatted {@code traceparent} header value, or {@code null} when
+     *         no identity is available to propagate
+     */
+    private static String buildTraceparent() {
+        SpanContext spanContext = Span.current().getSpanContext();
+        if (spanContext.isValid()) {
+            return String.format("00-%s-%s-%s",
+                    spanContext.getTraceId(),
+                    spanContext.getSpanId(),
+                    spanContext.getTraceFlags().asHex());
+        }
+        String traceId = MDC.get("traceId");
+        String spanId = MDC.get("spanId");
+        if (traceId == null || traceId.isEmpty() || spanId == null || spanId.isEmpty()) {
+            return null;
+        }
+        String flags = MDC.get("traceFlags");
+        if (flags == null || flags.isEmpty()) {
+            flags = "01";
+        }
+        return String.format("00-%s-%s-%s", traceId, spanId, flags);
     }
 }
