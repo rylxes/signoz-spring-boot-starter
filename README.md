@@ -31,6 +31,9 @@ audit trails, and JVM/HTTP metrics — with no code changes required.
 | **Alert on failure** | `@AlertOnFailure` increments a Micrometer Counter when a method throws |
 | **Outbound HTTP tracing** | Auto-injects `traceparent` + `X-Request-ID` into RestTemplate/WebClient calls (with MDC fallback when no OTEL span is active), logs outbound requests |
 | **Kafka trace propagation** | Producer/Consumer interceptors propagate `traceId` via Kafka record headers |
+| **SQS trace propagation** | AWS SDK v1 `RequestHandler2` injects `traceparent` into SQS `MessageAttributes`; AOP aspect on `@SqsListener` extracts it on the consumer side. Auto-skipped when the OTel Java Agent is on |
+| **gRPC trace propagation** | `ClientInterceptor` injects `traceparent` into gRPC `Metadata`; `ServerInterceptor` extracts to MDC. Auto-skipped when the OTel Java Agent is on |
+| **WebSocket / STOMP trace propagation** | Handshake interceptor captures inbound `traceparent` on the upgrade; `ChannelInterceptor` propagates per-frame. Auto-skipped when the OTel Java Agent is on |
 | **Slow query detection** | DataSource proxy times SQL queries, WARN above threshold (default 500ms) |
 | **Startup diagnostics** | Logs full config summary at boot — what's enabled, endpoints, thresholds |
 | **User context enrichment** | Extracts `userId`/`userEmail`/`userRoles` from SecurityContext into MDC |
@@ -95,7 +98,11 @@ to the agent** and focuses on app-level features only.
 | OTLP trace export | Skipped (agent handles it) | Active |
 | OTLP metrics export | Skipped (agent handles it) | Active |
 | Trace-ID in MDC (`traceId`, `spanId`) | From agent's active span | From inbound `traceparent`/`X-Request-ID`, else freshly minted |
-| Cross-service trace propagation | Agent propagates W3C `traceparent` | Starter propagates `traceparent` + `X-Request-ID` via RestTemplate / WebClient interceptors |
+| Cross-service trace propagation (HTTP) | Agent propagates W3C `traceparent` | Starter propagates `traceparent` + `X-Request-ID` via RestTemplate / WebClient interceptors |
+| Cross-service trace propagation (Kafka) | Agent propagates | Starter `TracingProducerInterceptor` / `TracingConsumerInterceptor` |
+| Cross-service trace propagation (SQS) | Agent propagates | Starter `TracingSqsRequestHandler` + `@SqsListener` aspect |
+| Cross-service trace propagation (gRPC) | Agent propagates | Starter `TracingGrpcClientInterceptor` / `ServerInterceptor` |
+| Cross-service trace propagation (WebSocket / STOMP) | Agent propagates | Starter `ChannelInterceptor` + handshake interceptor |
 
 **Recommended setup** — use the agent as the primary OTLP exporter, with the starter providing
 app-level features:
@@ -392,6 +399,167 @@ spring:
 
 The producer injects `traceId`, `spanId`, and `traceparent` into Kafka record headers.
 The consumer extracts them into MDC so all downstream logs are correlated.
+
+---
+
+## SQS Trace Propagation
+
+> **Agent-aware**: when the OpenTelemetry Java Agent is detected on the JVM,
+> the agent owns SQS instrumentation and these beans are skipped automatically.
+> No configuration needed.
+
+The starter exposes a `TracingSqsRequestHandler` (AWS SDK v1) and an AOP aspect
+that runs around any method annotated `@SqsListener`. Together they put the W3C
+`traceparent` on the wire and pull it back into MDC at the consumer.
+
+**Producer wiring** — attach the request handler to your SQS client:
+
+```java
+@Bean
+AmazonSQSAsync sqs(TracingSqsRequestHandler tracingHandler) {
+    return AmazonSQSAsyncClientBuilder.standard()
+        .withRequestHandlers(tracingHandler)   // ← add this line
+        .withRegion(Regions.EU_WEST_1)
+        .build();
+}
+```
+
+**Consumer wiring** — automatic. The starter auto-detects which `@SqsListener`
+annotation flavor is on your classpath and registers the matching aspect:
+
+| `@SqsListener` package | Library |
+|---|---|
+| `io.awspring.cloud.messaging.listener.annotation` | `io.awspring.cloud:spring-cloud-aws-messaging` 2.x |
+| `io.awspring.cloud.sqs.annotation` | `io.awspring.cloud:spring-cloud-aws-sqs` 3.x |
+| `org.springframework.cloud.aws.messaging.listener.annotation` | legacy `spring-cloud-starter-aws-messaging` |
+
+The aspect extracts trace context from the `Message<?>`, `MessageHeaders`, or
+`@Headers Map<String,Object>` parameter. If your listener takes only a payload,
+trace context cannot be auto-extracted — add a `Message<?>` parameter or call
+`SqsTraceContext.populateMdcFromHeaders(headers)` manually:
+
+```java
+@SqsListener("my-queue")
+public void onMessage(@Payload MyDto body, @Headers Map<String,Object> headers) {
+    // headers now has SqsTraceContext.populateMdcFromHeaders applied automatically
+    log.info("processing"); // logs include the upstream traceId
+}
+```
+
+Toggles:
+
+```yaml
+signoz:
+  sqs:
+    enabled: true            # default
+    propagate-trace: true    # default
+```
+
+---
+
+## gRPC Trace Propagation
+
+> **Agent-aware**: when the OpenTelemetry Java Agent is detected on the JVM,
+> these beans are skipped — the agent already wires gRPC `ClientInterceptor`
+> and `ServerInterceptor` for you.
+
+Without the agent, the starter exposes two beans:
+
+- `TracingGrpcClientInterceptor` — injects `traceparent` into outgoing
+  `Metadata`.
+- `TracingGrpcServerInterceptor` — extracts `traceparent` from inbound
+  `Metadata` and populates MDC for the duration of the call.
+
+The starter does **not** auto-attach them to a particular gRPC channel /
+server, because gRPC offers no Spring-native equivalent of `RestTemplate
+Customizer`. Wire them yourself:
+
+```java
+@Bean
+ManagedChannel myServiceChannel(TracingGrpcClientInterceptor tracing) {
+    return ManagedChannelBuilder.forAddress("svc-c", 9090)
+        .intercept(tracing)
+        .usePlaintext()
+        .build();
+}
+
+@Bean
+Server grpcServer(TracingGrpcServerInterceptor tracing, MyService service) {
+    return ServerBuilder.forPort(9090)
+        .intercept(tracing)
+        .addService(service)
+        .build();
+}
+```
+
+If you use [`net.devh:grpc-spring-boot-starter`](https://github.com/yidongnan/grpc-spring-boot-starter),
+add `@GrpcGlobalClientInterceptor` / `@GrpcGlobalServerInterceptor` to the bean
+methods that return these and they'll be applied to every channel / server
+automatically.
+
+> **MDC scope caveat**: gRPC may dispatch listener callbacks on a worker thread
+> different from the one that ran `interceptCall`. Wire-side propagation
+> always works; MDC on the user handler thread is best-effort with default
+> executors and may be empty under thread-pool executors. If you need
+> guaranteed MDC inside the handler, capture the trace context from `Metadata`
+> at the start of your method.
+
+Toggles:
+
+```yaml
+signoz:
+  grpc:
+    enabled: true
+    propagate-trace: true
+```
+
+---
+
+## WebSocket / STOMP Trace Propagation
+
+> **Agent-aware**: skipped when the OpenTelemetry Java Agent is detected.
+
+For STOMP, the starter registers a `WebSocketMessageBrokerConfigurer` that
+attaches a `ChannelInterceptor` to both the client-inbound and client-outbound
+channels:
+
+- **Inbound** (frame from client → server): reads the `traceparent` STOMP
+  native header and populates MDC.
+- **Outbound** (frame from server → client): reads the active span / MDC and
+  injects `traceparent` into the STOMP frame.
+
+Spring composes multiple `WebSocketMessageBrokerConfigurer` beans additively, so
+this configurer cooperates with any `@EnableWebSocketMessageBroker` config you
+already have — no changes required.
+
+For the WebSocket **handshake** (the HTTP upgrade), the starter exposes a
+`TracingWebSocketHandshakeInterceptor` bean. Attach it to your handler registry:
+
+```java
+@Override
+public void registerStompEndpoints(StompEndpointRegistry registry) {
+    registry.addEndpoint("/ws")
+        .addInterceptors(tracingWebSocketHandshakeInterceptor)   // ← add this
+        .withSockJS();
+}
+```
+
+The handshake interceptor stashes the inbound `traceparent` on the WebSocket
+session attributes; the channel interceptor falls back to that value if a
+specific frame doesn't carry the header.
+
+Raw (non-STOMP) WebSocket per-message propagation is not in scope — embed the
+trace context inside your message envelope and call
+`TraceContextCodec.currentTraceparent()` to obtain it.
+
+Toggles:
+
+```yaml
+signoz:
+  websocket:
+    enabled: true
+    propagate-trace: true
+```
 
 ---
 

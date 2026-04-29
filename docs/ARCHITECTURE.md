@@ -85,6 +85,13 @@ SigNozAutoConfiguration                 ← entry point (@AutoConfiguration / @C
       ├── SigNozWebAutoConfiguration       ← TraceIdMdcFilter, HttpLoggingFilter, MaskedArgumentAspect
       │   (only when @ConditionalOnWebApplication(SERVLET))
       ├── SigNozAuditAutoConfiguration     ← AuditLogAspect, SigNozAuditHandler
+      ├── SigNozMessagingAutoConfiguration ← Tracing{Producer,Consumer}Interceptor (Kafka)
+      ├── SigNozSqsAutoConfiguration       ← TracingSqsRequestHandler + @SqsListener aspect
+      │   (only when agent absent + AWS SDK v1 on classpath)
+      ├── SigNozGrpcAutoConfiguration      ← Tracing{Client,Server}Interceptor (gRPC)
+      │   (only when agent absent + io.grpc on classpath)
+      ├── SigNozWebSocketAutoConfiguration ← STOMP ChannelInterceptor + handshake
+      │   (only when agent absent + spring-websocket on classpath)
       └── SigNozMetricsAutoConfiguration   ← OtlpMeterRegistry, MeterRegistryCustomizer
           (only when @ConditionalOnClass(MeterRegistry.class))
 ```
@@ -95,6 +102,64 @@ SigNozAutoConfiguration                 ← entry point (@AutoConfiguration / @C
 |---|---|
 | Spring Boot 2.x | `META-INF/spring.factories` (key: `EnableAutoConfiguration`) |
 | Spring Boot 3.x | `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` |
+
+---
+
+## Cross-service trace propagation
+
+Each protocol module owns a piece of the same goal: keep the W3C `traceparent`
+on the wire and the trace IDs in MDC across service hops, regardless of how
+the services talk to each other.
+
+### Module / wire-format matrix
+
+| Protocol | Producer / outbound | Consumer / inbound | Wire artefact |
+|---|---|---|---|
+| HTTP | `TracingRestTemplateInterceptor` / `TracingWebClientFilter` | `TraceIdMdcFilter` | `traceparent` HTTP header |
+| Kafka | `TracingProducerInterceptor` | `TracingConsumerInterceptor` | record headers (`traceparent`, `traceId`, `spanId`) |
+| SQS | `TracingSqsRequestHandler` (AWS SDK v1) | `@SqsListener` aspect (awspring v2/v3 / legacy) | SQS `MessageAttributes` (`traceparent`) |
+| gRPC | `TracingGrpcClientInterceptor` | `TracingGrpcServerInterceptor` | gRPC `Metadata` (`traceparent`) |
+| WebSocket / STOMP | `TracingStompChannelInterceptor` (OUTBOUND) + handshake interceptor | `TracingStompChannelInterceptor` (INBOUND) + handshake interceptor | STOMP native header + WebSocket session attribute |
+
+All wire formats use the same canonical W3C `traceparent` value, produced via
+`TraceContextCodec.currentTraceparent()` and parsed via
+`TraceContextCodec.parse(...)`. End-to-end correctness across these protocols
+is asserted by `EndToEndTracePropagationTest` in `signoz-core`.
+
+### Agent-detection gating
+
+The three new modules (SQS, gRPC, WebSocket) are gated by **three** stacked
+conditions on their auto-configuration:
+
+```java
+@Conditional(OnMissingAgentCondition.class)        // skip if agent active
+@ConditionalOnClass(name = "<protocol-API class>")  // skip if user doesn't use it
+@ConditionalOnProperty("signoz.<x>.enabled", matchIfMissing = true)  // user kill switch
+```
+
+`OnMissingAgentCondition` returns `!AgentDetector.isAgentPresent()`.
+`AgentDetector` caches its result for the JVM lifetime and uses three signals
+in order: the `otel.javaagent.version` system property, the
+`io.opentelemetry.javaagent.OpenTelemetryAgent` class on the classpath, and a
+non-noop `GlobalOpenTelemetry` instance (compared by reference equality with
+the noop singleton — *not* by class-name substring, which produces false
+positives once anything has touched `GlobalOpenTelemetry`).
+
+This gating is the contract behind the README's "Agent-aware" callouts: when
+the agent is on, the agent owns instrumentation; when it's off, the starter
+fills the gap. There is no double-instrumentation path.
+
+### MDC scope caveats
+
+- **Synchronous executors** (gRPC `DirectExecutor`, default Kafka consumer
+  loop, awspring v2 `SimpleMessageListenerContainer`): MDC populated by an
+  inbound interceptor is visible inside the user handler.
+- **Thread-pool executors** (gRPC custom executor, async listeners): the
+  handler may run on a different thread than the one that ran the interceptor.
+  Wire-side propagation always works; MDC inside the handler is best-effort.
+  This is consistent across every MDC-based correlation pattern in this
+  starter (Kafka, SQS, gRPC, STOMP) — full cross-thread MDC is the OTel
+  agent's job.
 
 ---
 

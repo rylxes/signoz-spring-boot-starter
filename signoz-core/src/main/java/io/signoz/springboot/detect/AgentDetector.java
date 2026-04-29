@@ -69,11 +69,17 @@ public final class AgentDetector {
             // not present
         }
 
-        // Strategy 3: GlobalOpenTelemetry already initialized by the agent
+        // Strategy 3: GlobalOpenTelemetry already initialized to a non-noop value.
+        // Reference-equality against the noop singleton is the only reliable check —
+        // OTel's noop class is named "DefaultOpenTelemetry", not anything containing "Noop",
+        // so a name-substring test produces false positives in any test JVM that has ever
+        // touched GlobalOpenTelemetry (the registered default is also a DefaultOpenTelemetry).
         try {
-            Object global = io.opentelemetry.api.GlobalOpenTelemetry.get();
-            if (global != null && !global.getClass().getSimpleName().contains("Noop")) {
-                log.debug("[SigNoz] Agent detected via GlobalOpenTelemetry (non-noop)");
+            io.opentelemetry.api.OpenTelemetry global = io.opentelemetry.api.GlobalOpenTelemetry.get();
+            io.opentelemetry.api.OpenTelemetry noop = io.opentelemetry.api.OpenTelemetry.noop();
+            if (global != null && global != noop) {
+                log.debug("[SigNoz] Agent detected via GlobalOpenTelemetry (non-noop): {}",
+                        global.getClass().getName());
                 return true;
             }
         } catch (Exception ignored) {
@@ -84,9 +90,10 @@ public final class AgentDetector {
     }
 
     /**
-     * Clears the cached detection result. For testing only.
+     * Clears the cached detection result. <b>For testing only</b> — production
+     * code must not call this; agent presence cannot change at runtime.
      */
-    static void resetCache() {
+    public static void resetCache() {
         cached = null;
     }
 }

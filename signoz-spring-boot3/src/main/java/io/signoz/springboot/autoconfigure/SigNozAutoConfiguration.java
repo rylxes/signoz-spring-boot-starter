@@ -5,15 +5,18 @@ import io.signoz.springboot.properties.SigNozAsyncProperties;
 import io.signoz.springboot.properties.SigNozAuditProperties;
 import io.signoz.springboot.properties.SigNozDatabaseProperties;
 import io.signoz.springboot.properties.SigNozErrorProperties;
+import io.signoz.springboot.properties.SigNozGrpcProperties;
 import io.signoz.springboot.properties.SigNozLoggingProperties;
 import io.signoz.springboot.properties.SigNozMessagingProperties;
 import io.signoz.springboot.properties.SigNozOutboundProperties;
 import io.signoz.springboot.properties.SigNozProperties;
 import io.signoz.springboot.properties.SigNozSamplingProperties;
+import io.signoz.springboot.properties.SigNozSqsProperties;
 import io.signoz.springboot.properties.SigNozTimedProperties;
 import io.signoz.springboot.properties.SigNozTracingProperties;
 import io.signoz.springboot.properties.SigNozUserContextProperties;
 import io.signoz.springboot.properties.SigNozWebProperties;
+import io.signoz.springboot.properties.SigNozWebSocketProperties;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -41,7 +44,10 @@ import org.springframework.context.annotation.Import;
         SigNozAlertProperties.class,
         SigNozErrorProperties.class,
         SigNozAsyncProperties.class,
-        SigNozSamplingProperties.class
+        SigNozSamplingProperties.class,
+        SigNozSqsProperties.class,
+        SigNozGrpcProperties.class,
+        SigNozWebSocketProperties.class
 })
 @Import({
         SigNozLoggingAutoConfiguration.class,
@@ -53,6 +59,9 @@ import org.springframework.context.annotation.Import;
         SigNozAlertAutoConfiguration.class,
         SigNozOutboundAutoConfiguration.class,
         SigNozMessagingAutoConfiguration.class,
+        SigNozSqsAutoConfiguration.class,
+        SigNozGrpcAutoConfiguration.class,
+        SigNozWebSocketAutoConfiguration.class,
         SigNozDatabaseAutoConfiguration.class,
         SigNozUserContextAutoConfiguration.class,
         SigNozAsyncAutoConfiguration.class,

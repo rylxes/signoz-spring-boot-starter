@@ -147,6 +147,52 @@ signoz:
 
 ---
 
+## SQS properties (`signoz.sqs.*`)
+
+> **Agent-aware.** All beans gated by these properties are skipped when the
+> OpenTelemetry Java Agent is detected on the JVM (the agent owns SQS
+> instrumentation in that case).
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `signoz.sqs.enabled` | `boolean` | `true` | Enable/disable SQS trace propagation. Disabling skips both the producer `RequestHandler2` and the `@SqsListener` aspect. |
+| `signoz.sqs.propagate-trace` | `boolean` | `true` | Inject/extract W3C `traceparent` in SQS `MessageAttributes`. |
+
+Auto-detection: the matching `@SqsListener` aspect is registered based on which
+listener annotation is on the classpath (legacy `spring-cloud-aws-messaging`,
+awspring 2.x `spring-cloud-aws-messaging`, or awspring 3.x `spring-cloud-aws-sqs`).
+
+---
+
+## gRPC properties (`signoz.grpc.*`)
+
+> **Agent-aware.** Skipped when the OpenTelemetry Java Agent is detected.
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `signoz.grpc.enabled` | `boolean` | `true` | Enable/disable gRPC trace propagation interceptors (`TracingGrpcClientInterceptor` and `TracingGrpcServerInterceptor`). |
+| `signoz.grpc.propagate-trace` | `boolean` | `true` | Inject/extract W3C `traceparent` in gRPC `Metadata`. |
+
+The interceptors are exposed as beans; you wire them onto a channel / server
+manually. See README → "gRPC Trace Propagation" for snippets.
+
+---
+
+## WebSocket / STOMP properties (`signoz.websocket.*`)
+
+> **Agent-aware.** Skipped when the OpenTelemetry Java Agent is detected.
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `signoz.websocket.enabled` | `boolean` | `true` | Enable/disable STOMP trace propagation. Disabling skips both the channel interceptor configurer and the handshake interceptor bean. |
+| `signoz.websocket.propagate-trace` | `boolean` | `true` | Inject/extract W3C `traceparent` in STOMP native headers and handshake attributes. |
+
+The channel-side interceptor auto-attaches via a `WebSocketMessageBrokerConfigurer`;
+the handshake interceptor is exposed as a bean for you to attach to your
+`WebSocketHandlerRegistry` / `StompEndpointRegistry`.
+
+---
+
 ## Database properties (`signoz.database.*`)
 
 | Property | Type | Default | Description |
@@ -267,6 +313,19 @@ signoz:
     propagate-headers: true
 
   messaging:
+    enabled: true
+    propagate-trace: true
+
+  # Auto-skipped when the OpenTelemetry Java Agent is on the JVM.
+  sqs:
+    enabled: true
+    propagate-trace: true
+
+  grpc:
+    enabled: true
+    propagate-trace: true
+
+  websocket:
     enabled: true
     propagate-trace: true
 

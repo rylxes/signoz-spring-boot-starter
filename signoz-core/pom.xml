@@ -171,6 +171,38 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- AWS SDK v1 SQS (optional — for SQS trace propagation) -->
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-sqs</artifactId>
+            <version>1.12.692</version>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- gRPC API (optional — for gRPC trace propagation) -->
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-api</artifactId>
+            <version>1.62.2</version>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Spring WebSocket (optional — for WebSocket/STOMP trace propagation) -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-websocket</artifactId>
+            <version>5.3.31</version>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Spring Messaging (optional — for STOMP ChannelInterceptor) -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-messaging</artifactId>
+            <version>5.3.31</version>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
