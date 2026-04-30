@@ -1,5 +1,6 @@
 package io.signoz.springboot.autoconfigure;
 
+import io.signoz.springboot.masking.MaskingRegistry;
 import io.signoz.springboot.properties.SigNozAlertProperties;
 import io.signoz.springboot.properties.SigNozAsyncProperties;
 import io.signoz.springboot.properties.SigNozAuditProperties;
@@ -17,8 +18,10 @@ import io.signoz.springboot.properties.SigNozTracingProperties;
 import io.signoz.springboot.properties.SigNozUserContextProperties;
 import io.signoz.springboot.properties.SigNozWebProperties;
 import io.signoz.springboot.properties.SigNozWebSocketProperties;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 
@@ -77,5 +80,10 @@ import org.springframework.context.annotation.Import;
         SigNozDiagnosticsAutoConfiguration.class
 })
 public class SigNozAutoConfiguration {
-    // Configuration assembled via @Import — no additional beans required here.
+
+    @Bean
+    @ConditionalOnMissingBean
+    public MaskingRegistry maskingRegistry(SigNozProperties props) {
+        return new MaskingRegistry(props.getLogging());
+    }
 }

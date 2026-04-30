@@ -20,13 +20,12 @@ import org.springframework.context.annotation.Configuration;
  *   <li>The OpenTelemetry Java Agent is <em>not</em> present
  *       ({@link OnMissingAgentCondition}). When the agent is on, it owns SQS
  *       instrumentation and these beans are skipped to avoid double-injection.</li>
- *   <li>{@code com.amazonaws.handlers.RequestHandler2} is on the classpath
- *       (i.e. AWS SDK v1 SQS client is in use).</li>
  *   <li>{@code signoz.sqs.enabled} is {@code true} (default).</li>
  * </ul>
  *
- * <p><b>Producer wiring:</b> the {@link TracingSqsRequestHandler} bean must be
- * attached to your SQS client at construction:
+ * <p><b>Producer wiring:</b> when AWS SDK v1 is present, the
+ * {@link TracingSqsRequestHandler} bean must be attached to your SQS client at
+ * construction:
  * <pre>{@code
  * @Bean
  * AmazonSQSAsync sqs(TracingSqsRequestHandler tracingHandler) {
@@ -44,13 +43,16 @@ import org.springframework.context.annotation.Configuration;
 @Configuration(proxyBeanMethods = false)
 @Conditional(OnMissingAgentCondition.class)
 @ConditionalOnProperty(name = "signoz.sqs.enabled", havingValue = "true", matchIfMissing = true)
-@ConditionalOnClass(name = "com.amazonaws.handlers.RequestHandler2")
 public class SigNozSqsAutoConfiguration {
 
-    @Bean
-    @ConditionalOnMissingBean
-    public TracingSqsRequestHandler tracingSqsRequestHandler() {
-        return new TracingSqsRequestHandler();
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "com.amazonaws.handlers.RequestHandler2")
+    static class AwsSdkV1ProducerConfig {
+        @Bean
+        @ConditionalOnMissingBean
+        public TracingSqsRequestHandler tracingSqsRequestHandler() {
+            return new TracingSqsRequestHandler();
+        }
     }
 
     @Configuration(proxyBeanMethods = false)

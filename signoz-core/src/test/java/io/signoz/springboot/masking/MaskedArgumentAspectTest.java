@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * AOP unit tests for {@link MaskedArgumentAspect}.
+ * Compatibility tests for {@link MaskedArgumentAspect}.
  *
  * <p>Uses {@link AnnotationConfigApplicationContext} with {@link EnableAspectJAutoProxy}
  * so Spring's CGLIB proxy is applied to {@link SensitiveService}.
@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * from the underlying target instance. Setting a field inside the method body modifies the
  * <em>target</em> object's field, while the test reads the field from the <em>proxy</em>
  * object — which is always {@code null}. To avoid this split, all service methods
- * <em>return</em> the value under test so the return propagates through the AOP chain and
+ * <em>return</em> the value under test so the return propagates through the call and
  * back to the caller correctly.
  */
 class MaskedArgumentAspectTest {
@@ -43,9 +43,9 @@ class MaskedArgumentAspectTest {
     }
 
     @Test
-    void fullMaskReplacesAnnotatedParamWithStars() {
+    void fullMaskDoesNotChangeBusinessArgument() {
         String result = service.login("user1", "MySecret123");
-        assertThat(result).isEqualTo("***");
+        assertThat(result).isEqualTo("MySecret123");
     }
 
     @Test
@@ -56,27 +56,27 @@ class MaskedArgumentAspectTest {
 
     @Test
     void nullAnnotatedValueRemainsNull() {
-        // The aspect skips null values (if (args[i] != null) guard in source)
         String result = service.login("user1", null);
         assertThat(result).isNull();
     }
 
     @Test
-    void partialMaskShowsLastChars() {
+    void partialMaskDoesNotChangeBusinessArgument() {
         String result = service.partialMask("4111111111111234");
-        // PartialMaskingStrategy default: show first 2 and last 2 characters
-        // "4111111111111234" (16 chars) → "41************34"
-        assertThat(result).isNotNull();
-        assertThat(result).startsWith("41");
-        assertThat(result).endsWith("34");
-        assertThat(result).doesNotContain("111111111112");
+        assertThat(result).isEqualTo("4111111111111234");
     }
 
     @Test
-    void onlyAnnotatedParamIsMasked() {
+    void annotatedParamPassesThroughUnchanged() {
         String[] result = service.mixed("plainArg", "secretArg");
         assertThat(result[0]).isEqualTo("plainArg");
-        assertThat(result[1]).isEqualTo("***");
+        assertThat(result[1]).isEqualTo("secretArg");
+    }
+
+    @Test
+    void nonStringAnnotatedValuePassesThroughWithoutTypeMismatch() {
+        Integer result = service.pin(1234);
+        assertThat(result).isEqualTo(1234);
     }
 
     // ---- Inner configuration and beans ----
@@ -106,14 +106,14 @@ class MaskedArgumentAspectTest {
     }
 
     /**
-     * Service under test. Methods <em>return</em> their (potentially masked) parameter
-     * value so tests can assert on the return value — avoiding the proxy/target field-split
+     * Service under test. Methods <em>return</em> their parameter value so tests
+     * can assert on the return value — avoiding the proxy/target field-split
      * issue that would occur if fields were set inside the method body instead.
      */
     @Component
     static class SensitiveService {
 
-        /** Returns the password argument as received by the method body (after aspect masking). */
+        /** Returns the password argument as received by the method body. */
         public String login(String user, @Masked String password) {
             return password;
         }
@@ -123,7 +123,7 @@ class MaskedArgumentAspectTest {
             return plain;
         }
 
-        /** Returns the card number as received by the method body (after PARTIAL masking). */
+        /** Returns the card number as received by the method body. */
         public String partialMask(@Masked(strategy = Masked.MaskingStrategy.PARTIAL) String card) {
             return card;
         }
@@ -131,6 +131,10 @@ class MaskedArgumentAspectTest {
         /** Returns both arguments as a two-element array for independent assertion. */
         public String[] mixed(String plain, @Masked String secret) {
             return new String[]{plain, secret};
+        }
+
+        public Integer pin(@Masked Integer value) {
+            return value;
         }
     }
 }

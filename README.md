@@ -54,7 +54,7 @@ Pick the artifact that matches your Spring Boot version:
 <dependency>
     <groupId>io.github.rylxes</groupId>
     <artifactId>signoz-spring-boot2-starter</artifactId>
-    <version>1.0.3</version>
+    <version>1.0.6</version>
 </dependency>
 ```
 
@@ -63,7 +63,7 @@ Pick the artifact that matches your Spring Boot version:
 <dependency>
     <groupId>io.github.rylxes</groupId>
     <artifactId>signoz-spring-boot3-starter</artifactId>
-    <version>1.0.3</version>
+    <version>1.0.6</version>
 </dependency>
 ```
 
@@ -79,6 +79,50 @@ signoz:
 ```
 
 That's it — all features are on by default.
+
+---
+
+## Logging Backend Support
+
+The starter's full logging pipeline is Logback-based. With Logback on the classpath,
+the starter can automatically attach `SigNozJsonEncoder`, `OtlpLogbackAppender`,
+MDC trace fields, error fingerprinting, and log sampling.
+
+Projects that use another SLF4J backend, such as Log4j2, can still use the
+backend-neutral instrumentation: tracing, audit events, HTTP logging filters,
+outbound propagation, database timing, SQS/gRPC/WebSocket propagation, and MDC
+trace IDs. In that setup, configure JSON layout, MDC fields, masking/export, and
+log shipping in your logging backend.
+
+For a Log4j2 project, exclude Spring Boot's default logging backend and the
+Logback encoder from the SigNoz starter, then add your own backend:
+
+```xml
+<dependency>
+    <groupId>io.github.rylxes</groupId>
+    <artifactId>signoz-spring-boot3-starter</artifactId>
+    <version>1.0.6</version>
+    <exclusions>
+        <exclusion>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-logging</artifactId>
+        </exclusion>
+        <exclusion>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+        </exclusion>
+    </exclusions>
+</dependency>
+
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-log4j2</artifactId>
+</dependency>
+```
+
+When Logback is absent, Logback-specific auto-configuration is skipped. The
+starter still creates the shared masking registry for non-Logback features, but
+it does not install appenders or encoders for another logging implementation.
 
 ---
 
@@ -225,27 +269,30 @@ public class PaymentService {
 }
 ```
 
-> **Note:** `@SigNozLog` uses the Java APT (annotation processing) mechanism. If your build system
-> does not pass `--add-exports` flags on Java 9+, the processor emits a warning and skips injection —
-> you can still declare `log` manually in that case.
+> **Note:** `@SigNozLog` uses Java annotation processing. The starter includes the processor, but
+> dependency POMs cannot add compiler JVM flags to consuming builds. On Java 9+, configure the
+> required `--add-exports` options if your compiler blocks `jdk.compiler` internals; otherwise the
+> processor emits a warning and you can declare `log` manually.
 
 ---
 
-### `@Masked` — Automatic field masking
+### `@Masked` — Serialization-time masking
 
-Annotate method parameters to have their values replaced with `***` in log output.
+Annotate sensitive method parameters as documentation for masking intent. Runtime business arguments
+are not changed; masking is applied when SigNoz serializes logs, audit entries, headers, and JSON
+payloads.
 
 ```java
 @Service
 public class UserService {
     public void createUser(String username, @Masked String password) {
-        // password is "***" in any log statement within this method's aspect
+        // password remains the real value for business logic.
         log.info("Creating user: {}", username);
     }
 
-    // Partial masking — shows first 0 and last 4 characters of a card number
-    public void charge(@Masked(strategy = Masked.Strategy.PARTIAL) String cardNumber) {
-        log.info("Charging card ending {}", cardNumber);  // e.g. "****1234"
+    // Partial masking is applied by SigNoz serializers for matching fields/payloads.
+    public void charge(@Masked(strategy = Masked.MaskingStrategy.PARTIAL) String cardNumber) {
+        log.info("Charging card ending {}", cardNumber);
     }
 }
 ```

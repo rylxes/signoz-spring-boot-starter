@@ -99,7 +99,10 @@ class SigNozProtocolAutoConfigurationTest {
         void doesNotRegisterWhenAwsSdkAbsent() {
             runner()
                     .withClassLoader(new FilteredClassLoader("com.amazonaws.handlers.RequestHandler2"))
-                    .run(ctx -> assertThat(ctx).doesNotHaveBean(TracingSqsRequestHandler.class));
+                    .run(ctx -> {
+                        assertThat(ctx).doesNotHaveBean(TracingSqsRequestHandler.class);
+                        assertThat(ctx).hasSingleBean(AwspringV2SqsListenerTraceAspect.class);
+                    });
         }
 
         @Test

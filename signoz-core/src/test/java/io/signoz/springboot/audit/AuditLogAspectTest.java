@@ -1,6 +1,7 @@
 package io.signoz.springboot.audit;
 
 import io.signoz.springboot.annotation.AuditLog;
+import io.signoz.springboot.annotation.Masked;
 import io.signoz.springboot.properties.SigNozAuditProperties;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -82,6 +83,16 @@ class AuditLogAspectTest {
 
         assertThat(eventCapture.events).hasSize(1);
         assertThat(eventCapture.events.get(0).getArgs()).isNotNull();
+    }
+
+    @Test
+    void maskedArgsAreOnlyMaskedInCapturedAuditEvent() {
+        String result = service.doSensitive("user1", "MySecret123");
+
+        assertThat(result).isEqualTo("MySecret123");
+        assertThat(eventCapture.events).hasSize(1);
+        assertThat(eventCapture.events.get(0).getArgs())
+                .containsExactly("user1", "***");
     }
 
     @Test
@@ -197,6 +208,11 @@ class AuditLogAspectTest {
         @AuditLog(action = "NO_ARGS", captureArgs = false)
         public String doNoArgs(String secret) {
             return "ok";
+        }
+
+        @AuditLog(action = "SENSITIVE")
+        public String doSensitive(String username, @Masked String password) {
+            return password;
         }
     }
 }

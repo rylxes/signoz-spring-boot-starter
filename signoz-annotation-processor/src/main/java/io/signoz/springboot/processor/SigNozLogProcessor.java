@@ -27,9 +27,10 @@ import java.util.Set;
  *       org.slf4j.LoggerFactory.getLogger(ThisClass.class);
  * </pre>
  *
- * <p><strong>On Java 9–21</strong>: The same internal APIs are accessible when
- * the consumer's build configures {@code --add-opens} for {@code jdk.compiler}.
- * The starter's POM configures these automatically for consuming projects.
+ * <p><strong>On Java 9-21</strong>: The same internal APIs are accessible when
+ * the consumer's build configures the required {@code --add-exports} options for
+ * {@code jdk.compiler}. Dependency POMs cannot add compiler JVM flags to
+ * consuming builds, so users may need to configure those options explicitly.
  *
  * <p><strong>Graceful fallback</strong>: If the internal APIs are inaccessible
  * (GraalVM native-image, restricted security policy, etc.), the processor emits
@@ -78,7 +79,7 @@ public class SigNozLogProcessor extends AbstractProcessor {
                         Diagnostic.Kind.WARNING,
                         "@SigNozLog: could not inject logger field into '"
                                 + typeElement.getSimpleName()
-                                + "' — compiler internals unavailable. "
+                                + "' - compiler internals unavailable. "
                                 + "Please declare: "
                                 + "private static final org.slf4j.Logger log = "
                                 + "org.slf4j.LoggerFactory.getLogger("

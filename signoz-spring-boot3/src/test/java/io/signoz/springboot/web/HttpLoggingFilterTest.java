@@ -15,10 +15,14 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -33,7 +37,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * exercising the logging path, and the built-in {@code /actuator/health} endpoint
  * is used to verify that excluded paths are not logged.
  */
-@SpringBootTest(classes = {TestSigNozApplication.class, HttpLoggingFilterTest.TestController.class})
+@SpringBootTest(
+        classes = {TestSigNozApplication.class, HttpLoggingFilterTest.TestController.class},
+        properties = {
+                "signoz.web.log-request-body=true",
+                "signoz.web.log-response-body=true",
+                "signoz.web.max-body-bytes=4"
+        })
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class HttpLoggingFilterTest {
@@ -43,6 +53,12 @@ class HttpLoggingFilterTest {
         @GetMapping(value = "/test", produces = MediaType.TEXT_PLAIN_VALUE)
         public String hello() {
             return "ok";
+        }
+
+        @PostMapping(value = "/echo", consumes = MediaType.TEXT_PLAIN_VALUE,
+                produces = MediaType.TEXT_PLAIN_VALUE)
+        public String echo(@RequestBody String body) {
+            return body;
         }
     }
 
@@ -69,7 +85,8 @@ class HttpLoggingFilterTest {
     @Test
     void getRequestIsLogged() throws Exception {
         mockMvc.perform(get("/test"))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(content().string("ok"));
 
         assertThat(listAppender.list).isNotEmpty();
         boolean found = false;
@@ -87,7 +104,8 @@ class HttpLoggingFilterTest {
     @Test
     void statusCodeIncludedInLog() throws Exception {
         mockMvc.perform(get("/test"))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(content().string("ok"));
 
         boolean statusFound = false;
         for (ILoggingEvent event : listAppender.list) {
@@ -114,5 +132,28 @@ class HttpLoggingFilterTest {
                     .as("Filter should not log excluded path /actuator/health")
                     .doesNotContain("/actuator/health");
         }
+    }
+
+    @Test
+    void loggedRequestBodyLimitDoesNotTruncateControllerInput() throws Exception {
+        listAppender.list.clear();
+
+        mockMvc.perform(post("/echo")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("abcdef"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("abcdef"));
+
+        boolean foundCappedLogBody = false;
+        for (ILoggingEvent event : listAppender.list) {
+            String msg = event.getFormattedMessage();
+            if (msg.contains("/echo") && msg.contains("requestBody=abcd")) {
+                foundCappedLogBody = true;
+                break;
+            }
+        }
+        assertThat(foundCappedLogBody)
+                .as("Expected request log to contain the capped request body")
+                .isTrue();
     }
 }

@@ -7,14 +7,15 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marks a method parameter, field, or return value as sensitive so that it
- * is redacted before being written to any log output.
+ * Marks a method parameter, field, or return value as sensitive so that
+ * SigNoz serialization boundaries can redact it before it is written to log
+ * or audit output.
  *
  * <p>The masking is applied by:
  * <ol>
- *   <li>{@code MaskedArgumentAspect} — intercepts bean method calls and replaces the
- *       annotated argument's {@code toString()} representation before it reaches the logger.</li>
- *   <li>{@code SigNozJsonEncoder} — scans JSON log output for field names matching
+ *   <li>{@code AuditLogAspect} - masks captured audit argument copies for
+ *       annotated parameters without changing the target method arguments.</li>
+ *   <li>{@code SigNozJsonEncoder} - scans JSON log output for field names matching
  *       {@code signoz.logging.masked-fields} and replaces their values.</li>
  * </ol>
  *

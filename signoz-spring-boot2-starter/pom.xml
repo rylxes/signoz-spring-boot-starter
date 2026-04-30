@@ -27,19 +27,24 @@
         </dependency>
 
         <!--
-          Annotation processor (compile-only — injects `log` field for @SigNozLog).
-          Declared as optional so it does not pollute transitive compile classpaths.
+          Annotation processor: included so @SigNozLog is available to consumers.
         -->
         <dependency>
             <groupId>io.github.rylxes</groupId>
             <artifactId>signoz-annotation-processor</artifactId>
-            <optional>true</optional>
         </dependency>
 
         <!-- Core business logic -->
         <dependency>
             <groupId>io.github.rylxes</groupId>
             <artifactId>signoz-core</artifactId>
+        </dependency>
+
+        <!-- Boot 2 / Logback 1.2 needs logstash-logback-encoder 7.3. -->
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>7.3</version>
         </dependency>
 
         <!-- Spring Boot 2.x auto-configuration + web filters -->

@@ -6,7 +6,10 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpServletResponseWrapper;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 
 /**
  * {@link HttpServletResponseWrapper} that captures the response body so it can
@@ -36,19 +39,29 @@ public class CachedBodyResponseWrapper extends HttpServletResponseWrapper {
     @Override
     public PrintWriter getWriter() throws IOException {
         if (writer == null) {
-            writer = new PrintWriter(getOutputStream(), true);
+            String encoding = getCharacterEncoding();
+            Charset charset = encoding != null
+                    ? Charset.forName(encoding)
+                    : StandardCharsets.UTF_8;
+            writer = new PrintWriter(new OutputStreamWriter(getOutputStream(), charset), true);
         }
         return writer;
     }
 
     public byte[] getCapturedBody() {
+        if (writer != null) {
+            writer.flush();
+        }
         return capture.toByteArray();
     }
 
+    /** Flushes buffered writes to the underlying response. */
     public void copyBodyToResponse() throws IOException {
-        if (capture.size() > 0) {
-            super.getOutputStream().write(capture.toByteArray());
-            super.getOutputStream().flush();
+        if (writer != null) {
+            writer.flush();
+        }
+        if (outputStream != null) {
+            outputStream.flush();
         }
     }
 
@@ -83,6 +96,8 @@ public class CachedBodyResponseWrapper extends HttpServletResponseWrapper {
         }
 
         @Override
-        public void flush() throws IOException { delegate.flush(); }
+        public void flush() throws IOException {
+            delegate.flush();
+        }
     }
 }

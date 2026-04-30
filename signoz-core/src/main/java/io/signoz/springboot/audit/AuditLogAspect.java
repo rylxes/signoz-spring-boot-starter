@@ -2,6 +2,9 @@ package io.signoz.springboot.audit;
 
 import io.opentelemetry.api.trace.Span;
 import io.signoz.springboot.annotation.AuditLog;
+import io.signoz.springboot.annotation.Masked;
+import io.signoz.springboot.masking.PartialMaskingStrategy;
+import io.signoz.springboot.masking.RegexMaskingStrategy;
 import io.signoz.springboot.properties.SigNozAuditProperties;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -13,6 +16,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.time.Instant;
 
@@ -70,7 +74,7 @@ public class AuditLogAspect {
 
         // Capture args if enabled
         boolean captureArgs = auditLog.captureArgs() && auditProps.isCaptureArgs();
-        Object[] capturedArgs = captureArgs ? joinPoint.getArgs() : null;
+        Object[] capturedArgs = captureArgs ? captureArgs(joinPoint, method, signature) : null;
 
         try {
             Object result = joinPoint.proceed();
@@ -117,6 +121,45 @@ public class AuditLogAspect {
 
             eventPublisher.publishEvent(event);
             throw t;
+        }
+    }
+
+    private Object[] captureArgs(ProceedingJoinPoint joinPoint,
+                                 Method method,
+                                 MethodSignature signature) {
+        Object[] args = joinPoint.getArgs();
+        Object[] capturedArgs = args.clone();
+        Annotation[][] paramAnnotations = method.getParameterAnnotations();
+        String[] paramNames = signature.getParameterNames();
+
+        for (int i = 0; i < capturedArgs.length && i < paramAnnotations.length; i++) {
+            for (Annotation ann : paramAnnotations[i]) {
+                if (ann instanceof Masked && capturedArgs[i] != null) {
+                    capturedArgs[i] = applyMask(
+                            paramNames != null ? paramNames[i] : "param" + i,
+                            capturedArgs[i],
+                            (Masked) ann);
+                    break;
+                }
+            }
+        }
+        return capturedArgs;
+    }
+
+    private Object applyMask(String paramName, Object value, Masked masked) {
+        String rawString = value.toString();
+        switch (masked.strategy()) {
+            case PARTIAL:
+                return new PartialMaskingStrategy().mask(paramName, rawString);
+            case REGEX:
+                if (!masked.pattern().isEmpty()) {
+                    return new RegexMaskingStrategy(masked.pattern(), masked.replacement())
+                            .mask(paramName, rawString);
+                }
+                // Fall through to FULL if no pattern provided
+            case FULL:
+            default:
+                return masked.replacement();
         }
     }
 

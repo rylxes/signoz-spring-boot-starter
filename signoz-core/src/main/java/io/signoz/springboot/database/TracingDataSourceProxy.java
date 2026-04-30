@@ -6,6 +6,10 @@ import org.slf4j.LoggerFactory;
 
 import javax.sql.DataSource;
 import java.io.PrintWriter;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.sql.*;
 // java.util.logging.Logger used via FQN in getParentLogger()
 
@@ -51,6 +55,59 @@ public class TracingDataSourceProxy implements DataSource {
     /** Returns the original unwrapped DataSource. */
     public DataSource getDelegate() { return delegate; }
 
+    private Statement traceStatement(Statement statement) {
+        return (Statement) Proxy.newProxyInstance(
+                proxyClassLoader(),
+                new Class<?>[]{Statement.class},
+                new TimingInvocationHandler(statement, null));
+    }
+
+    private CallableStatement traceCallableStatement(CallableStatement statement, String sql) {
+        return (CallableStatement) Proxy.newProxyInstance(
+                proxyClassLoader(),
+                new Class<?>[]{CallableStatement.class},
+                new TimingInvocationHandler(statement, sql));
+    }
+
+    private ClassLoader proxyClassLoader() {
+        ClassLoader classLoader = TracingDataSourceProxy.class.getClassLoader();
+        return classLoader != null ? classLoader : ClassLoader.getSystemClassLoader();
+    }
+
+    private boolean isTimedStatementMethod(String methodName) {
+        return "execute".equals(methodName)
+                || "executeQuery".equals(methodName)
+                || "executeUpdate".equals(methodName)
+                || "executeBatch".equals(methodName)
+                || "executeLargeUpdate".equals(methodName)
+                || "executeLargeBatch".equals(methodName);
+    }
+
+    private String resolveSql(String preparedSql, Object[] args) {
+        if (args != null && args.length > 0 && args[0] instanceof String) {
+            return (String) args[0];
+        }
+        return preparedSql != null ? preparedSql : "batch";
+    }
+
+    private void logSql(String sql, long startNanos) {
+        long durationMs = (System.nanoTime() - startNanos) / 1_000_000;
+        String truncatedSql = truncate(sql);
+        if (durationMs > props.getSlowQueryThresholdMs()) {
+            log.warn("[SigNoz] SLOW QUERY ({}ms > {}ms): {}",
+                    durationMs, props.getSlowQueryThresholdMs(), truncatedSql);
+        } else if (props.isLogAllQueries()) {
+            log.info("[SigNoz] Query ({}ms): {}", durationMs, truncatedSql);
+        }
+    }
+
+    private String truncate(String s) {
+        if (s == null) return "";
+        return s.length() > props.getMaxQueryLength()
+                ? s.substring(0, props.getMaxQueryLength()) + "..."
+                : s;
+    }
+
     /**
      * Connection wrapper that intercepts {@code prepareStatement} and
      * {@code createStatement} to return timing-aware statement proxies.
@@ -93,13 +150,13 @@ public class TracingDataSourceProxy implements DataSource {
             return new TracingPreparedStatementProxy(delegate.prepareStatement(sql, columnNames), sql);
         }
 
-        // --- All other Connection methods delegate directly ---
-        @Override public Statement createStatement() throws SQLException { return delegate.createStatement(); }
-        @Override public Statement createStatement(int r, int c) throws SQLException { return delegate.createStatement(r, c); }
-        @Override public Statement createStatement(int r, int c, int h) throws SQLException { return delegate.createStatement(r, c, h); }
-        @Override public CallableStatement prepareCall(String sql) throws SQLException { return delegate.prepareCall(sql); }
-        @Override public CallableStatement prepareCall(String sql, int r, int c) throws SQLException { return delegate.prepareCall(sql, r, c); }
-        @Override public CallableStatement prepareCall(String sql, int r, int c, int h) throws SQLException { return delegate.prepareCall(sql, r, c, h); }
+        // --- Connection methods ---
+        @Override public Statement createStatement() throws SQLException { return traceStatement(delegate.createStatement()); }
+        @Override public Statement createStatement(int r, int c) throws SQLException { return traceStatement(delegate.createStatement(r, c)); }
+        @Override public Statement createStatement(int r, int c, int h) throws SQLException { return traceStatement(delegate.createStatement(r, c, h)); }
+        @Override public CallableStatement prepareCall(String sql) throws SQLException { return traceCallableStatement(delegate.prepareCall(sql), sql); }
+        @Override public CallableStatement prepareCall(String sql, int r, int c) throws SQLException { return traceCallableStatement(delegate.prepareCall(sql, r, c), sql); }
+        @Override public CallableStatement prepareCall(String sql, int r, int c, int h) throws SQLException { return traceCallableStatement(delegate.prepareCall(sql, r, c, h), sql); }
         @Override public String nativeSQL(String sql) throws SQLException { return delegate.nativeSQL(sql); }
         @Override public void setAutoCommit(boolean autoCommit) throws SQLException { delegate.setAutoCommit(autoCommit); }
         @Override public boolean getAutoCommit() throws SQLException { return delegate.getAutoCommit(); }
@@ -178,29 +235,126 @@ public class TracingDataSourceProxy implements DataSource {
             });
         }
 
+        @Override
+        public ResultSet executeQuery(final String sql) throws SQLException {
+            return timed(sql, new SqlCallable<ResultSet>() {
+                @Override public ResultSet call() throws SQLException { return TracingPreparedStatementProxy.super.executeQuery(sql); }
+            });
+        }
+
+        @Override
+        public int executeUpdate(final String sql) throws SQLException {
+            return timed(sql, new SqlCallable<Integer>() {
+                @Override public Integer call() throws SQLException { return TracingPreparedStatementProxy.super.executeUpdate(sql); }
+            });
+        }
+
+        @Override
+        public boolean execute(final String sql) throws SQLException {
+            return timed(sql, new SqlCallable<Boolean>() {
+                @Override public Boolean call() throws SQLException { return TracingPreparedStatementProxy.super.execute(sql); }
+            });
+        }
+
+        @Override
+        public int[] executeBatch() throws SQLException {
+            return timed(sql + " [batch]", new SqlCallable<int[]>() {
+                @Override public int[] call() throws SQLException { return TracingPreparedStatementProxy.super.executeBatch(); }
+            });
+        }
+
+        @Override
+        public int executeUpdate(final String sql, final int autoGeneratedKeys) throws SQLException {
+            return timed(sql, new SqlCallable<Integer>() {
+                @Override public Integer call() throws SQLException { return TracingPreparedStatementProxy.super.executeUpdate(sql, autoGeneratedKeys); }
+            });
+        }
+
+        @Override
+        public int executeUpdate(final String sql, final int[] columnIndexes) throws SQLException {
+            return timed(sql, new SqlCallable<Integer>() {
+                @Override public Integer call() throws SQLException { return TracingPreparedStatementProxy.super.executeUpdate(sql, columnIndexes); }
+            });
+        }
+
+        @Override
+        public int executeUpdate(final String sql, final String[] columnNames) throws SQLException {
+            return timed(sql, new SqlCallable<Integer>() {
+                @Override public Integer call() throws SQLException { return TracingPreparedStatementProxy.super.executeUpdate(sql, columnNames); }
+            });
+        }
+
+        @Override
+        public boolean execute(final String sql, final int autoGeneratedKeys) throws SQLException {
+            return timed(sql, new SqlCallable<Boolean>() {
+                @Override public Boolean call() throws SQLException { return TracingPreparedStatementProxy.super.execute(sql, autoGeneratedKeys); }
+            });
+        }
+
+        @Override
+        public boolean execute(final String sql, final int[] columnIndexes) throws SQLException {
+            return timed(sql, new SqlCallable<Boolean>() {
+                @Override public Boolean call() throws SQLException { return TracingPreparedStatementProxy.super.execute(sql, columnIndexes); }
+            });
+        }
+
+        @Override
+        public boolean execute(final String sql, final String[] columnNames) throws SQLException {
+            return timed(sql, new SqlCallable<Boolean>() {
+                @Override public Boolean call() throws SQLException { return TracingPreparedStatementProxy.super.execute(sql, columnNames); }
+            });
+        }
+
         private <T> T timed(SqlCallable<T> callable) throws SQLException {
+            return timed(sql, callable);
+        }
+
+        private <T> T timed(String sqlToLog, SqlCallable<T> callable) throws SQLException {
             long start = System.nanoTime();
             try {
                 return callable.call();
             } finally {
-                long durationMs = (System.nanoTime() - start) / 1_000_000;
-                String truncatedSql = truncate(sql);
-                if (durationMs > props.getSlowQueryThresholdMs()) {
-                    log.warn("[SigNoz] SLOW QUERY ({}ms > {}ms): {}", durationMs, props.getSlowQueryThresholdMs(), truncatedSql);
-                } else if (props.isLogAllQueries()) {
-                    log.info("[SigNoz] Query ({}ms): {}", durationMs, truncatedSql);
-                }
+                logSql(sqlToLog, start);
             }
-        }
-
-        private String truncate(String s) {
-            if (s == null) return "";
-            return s.length() > props.getMaxQueryLength() ? s.substring(0, props.getMaxQueryLength()) + "..." : s;
         }
     }
 
     private interface SqlCallable<T> {
         T call() throws SQLException;
+    }
+
+    private class TimingInvocationHandler implements InvocationHandler {
+        private final Object statement;
+        private final String preparedSql;
+
+        TimingInvocationHandler(Object statement, String preparedSql) {
+            this.statement = statement;
+            this.preparedSql = preparedSql;
+        }
+
+        @Override
+        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+            if (method.getDeclaringClass() == Object.class) {
+                return invokeDelegate(method, args);
+            }
+            if (isTimedStatementMethod(method.getName())) {
+                long start = System.nanoTime();
+                try {
+                    return invokeDelegate(method, args);
+                } finally {
+                    logSql(resolveSql(preparedSql, args), start);
+                }
+            }
+            return invokeDelegate(method, args);
+        }
+
+        private Object invokeDelegate(Method method, Object[] args) throws Throwable {
+            try {
+                return method.invoke(statement, args);
+            } catch (InvocationTargetException ex) {
+                throw ex.getTargetException();
+            }
+        }
     }
 
     /**

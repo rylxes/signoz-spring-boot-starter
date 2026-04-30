@@ -31,7 +31,6 @@ import java.util.List;
 /**
  * Auto-configures the SigNoz logging pipeline:
  * <ul>
- *   <li>Registers {@link MaskingRegistry} with configured masked fields</li>
  *   <li>Programmatically attaches {@link OtlpLogbackAppender} and/or
  *       {@link SigNozJsonEncoder} to the root Logback logger based on
  *       {@code signoz.logging.mode}</li>
@@ -48,12 +47,6 @@ public class SigNozLoggingAutoConfiguration {
 
     public SigNozLoggingAutoConfiguration(SigNozProperties props) {
         this.props = props;
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public MaskingRegistry maskingRegistry() {
-        return new MaskingRegistry(props.getLogging());
     }
 
     @Configuration

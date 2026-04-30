@@ -43,7 +43,8 @@ import javax.tools.Diagnostic;
  *   --add-exports jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED
  *   --add-exports jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED
  * </pre>
- * The starter's POM adds these automatically when the starter dependency is used.
+ * Dependency POMs cannot add compiler JVM flags to consuming builds, so users
+ * may need to configure these options explicitly.
  */
 public class JavacAstLogInjector extends JavacLogInjector {
 
