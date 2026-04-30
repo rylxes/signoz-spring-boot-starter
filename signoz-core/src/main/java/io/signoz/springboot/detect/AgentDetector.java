@@ -1,5 +1,8 @@
 package io.signoz.springboot.detect;
 
+import java.lang.reflect.Field;
+
+import io.opentelemetry.api.OpenTelemetry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,7 +18,12 @@ import org.slf4j.LoggerFactory;
  * <ol>
  *   <li>System property {@code otel.javaagent.version} — set by the agent at startup</li>
  *   <li>Class presence {@code io.opentelemetry.javaagent.OpenTelemetryAgent}</li>
- *   <li>{@code GlobalOpenTelemetry} already initialized (non-noop)</li>
+ *   <li>{@code GlobalOpenTelemetry} already holds a non-noop instance, read via
+ *       reflection on its private static field. {@code GlobalOpenTelemetry.get()} must
+ *       not be called here: when nothing has been registered yet, {@code get()}
+ *       auto-installs a noop and locks out any future {@code set()} (or
+ *       {@code OpenTelemetrySdkBuilder.buildAndRegisterGlobal()}) call, which would
+ *       break the starter's own SDK setup when no agent is present.</li>
  * </ol>
  *
  * <p>The result is cached for the lifetime of the JVM (agent presence cannot change).
@@ -69,24 +77,53 @@ public final class AgentDetector {
             // not present
         }
 
-        // Strategy 3: GlobalOpenTelemetry already initialized to a non-noop value.
-        // Reference-equality against the noop singleton is the only reliable check —
-        // OTel's noop class is named "DefaultOpenTelemetry", not anything containing "Noop",
-        // so a name-substring test produces false positives in any test JVM that has ever
-        // touched GlobalOpenTelemetry (the registered default is also a DefaultOpenTelemetry).
-        try {
-            io.opentelemetry.api.OpenTelemetry global = io.opentelemetry.api.GlobalOpenTelemetry.get();
-            io.opentelemetry.api.OpenTelemetry noop = io.opentelemetry.api.OpenTelemetry.noop();
-            if (global != null && global != noop) {
-                log.debug("[SigNoz] Agent detected via GlobalOpenTelemetry (non-noop): {}",
-                        global.getClass().getName());
-                return true;
-            }
-        } catch (Exception ignored) {
-            // not initialized or error
+        // Strategy 3: GlobalOpenTelemetry already holds a non-noop instance.
+        //
+        // Read the private static field directly via reflection — calling
+        // GlobalOpenTelemetry.get() would trigger maybeAutoConfigureAndSetGlobal(),
+        // which installs a noop and prevents the starter's own SDK config from
+        // calling buildAndRegisterGlobal() later (IllegalStateException at startup).
+        //
+        // Field layout (opentelemetry-api 1.x):
+        //   GlobalOpenTelemetry.globalOpenTelemetry : ObfuscatedOpenTelemetry  (nullable)
+        //   ObfuscatedOpenTelemetry.delegate        : OpenTelemetry
+        //
+        // Null field => nothing registered yet => no agent (this is the path the
+        // starter takes when running standalone, and we must not perturb it).
+        OpenTelemetry registered = readRegisteredGlobal();
+        if (registered != null && registered != OpenTelemetry.noop()) {
+            log.debug("[SigNoz] Agent detected via GlobalOpenTelemetry (non-noop): {}",
+                    registered.getClass().getName());
+            return true;
         }
 
         return false;
+    }
+
+    private static io.opentelemetry.api.OpenTelemetry readRegisteredGlobal() {
+        try {
+            Field globalField = io.opentelemetry.api.GlobalOpenTelemetry.class
+                    .getDeclaredField("globalOpenTelemetry");
+            globalField.setAccessible(true);
+            Object obfuscated = globalField.get(null);
+            if (obfuscated == null) {
+                return null;
+            }
+            Field delegateField = obfuscated.getClass().getDeclaredField("delegate");
+            delegateField.setAccessible(true);
+            Object delegate = delegateField.get(obfuscated);
+            return (delegate instanceof io.opentelemetry.api.OpenTelemetry)
+                    ? (io.opentelemetry.api.OpenTelemetry) delegate
+                    : null;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            // Field layout changed (newer OTel API), or reflection blocked by the
+            // module system. Fall back to "not detected" rather than calling .get(),
+            // which would corrupt the global. The starter still works without
+            // strategy 3 — strategies 1 and 2 cover the agent case.
+            log.debug("[SigNoz] Could not read GlobalOpenTelemetry via reflection: {}",
+                    e.toString());
+            return null;
+        }
     }
 
     /**
