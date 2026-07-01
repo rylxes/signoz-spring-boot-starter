@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -62,7 +63,12 @@ public class HttpLoggingFilter extends OncePerRequestFilter {
         long startTime = System.currentTimeMillis();
         String method = request.getMethod();
 
-        boolean shouldCacheReqBody = webProps.isLogRequestBody() && isBodyMethod(method);
+        // Never cache multipart bodies: the caching wrapper does not support
+        // getParts(), so wrapping strips file parts and breaks multipart uploads
+        // (MissingServletRequestPartException downstream).
+        boolean shouldCacheReqBody = webProps.isLogRequestBody()
+                && isBodyMethod(method)
+                && !isMultipart(request);
         CachedBodyRequestWrapper wrappedRequest = shouldCacheReqBody
                 ? new CachedBodyRequestWrapper(request, webProps.getMaxBodyBytes())
                 : null;
@@ -143,5 +149,11 @@ public class HttpLoggingFilter extends OncePerRequestFilter {
         return "POST".equalsIgnoreCase(method)
                 || "PUT".equalsIgnoreCase(method)
                 || "PATCH".equalsIgnoreCase(method);
+    }
+
+    private static boolean isMultipart(HttpServletRequest request) {
+        String contentType = request.getContentType();
+        return contentType != null
+                && contentType.toLowerCase(Locale.ROOT).startsWith("multipart/");
     }
 }
