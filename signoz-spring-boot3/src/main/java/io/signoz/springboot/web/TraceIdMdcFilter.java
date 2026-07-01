@@ -62,8 +62,11 @@ public class TraceIdMdcFilter extends OncePerRequestFilter {
 
         Span currentSpan = Span.current();
         SpanContext ctx = currentSpan != null ? currentSpan.getSpanContext() : null;
+        boolean agentPopulated = ctx != null && ctx.isValid();
 
-        if (ctx != null && ctx.isValid()) {
+        if (agentPopulated) {
+            // OTEL agent already emits trace_id/span_id/trace_flags into MDC;
+            // reuse its identity for the response headers but don't duplicate the MDC keys.
             traceId = ctx.getTraceId();
             spanId = ctx.getSpanId();
             traceFlags = ctx.getTraceFlags().asHex();
@@ -85,9 +88,13 @@ public class TraceIdMdcFilter extends OncePerRequestFilter {
         String requestId = inboundRequestId != null ? inboundRequestId : traceId;
 
         MDC.put("requestId", requestId);
-        MDC.put("traceId", traceId);
-        MDC.put("spanId", spanId);
-        MDC.put("traceFlags", traceFlags);
+        if (!agentPopulated) {
+            // OpenTelemetry-native snake_case keys, only when no agent owns them,
+            // so logs are consistent and queryable in SigNoz without duplicates.
+            MDC.put("trace_id", traceId);
+            MDC.put("span_id", spanId);
+            MDC.put("trace_flags", traceFlags);
+        }
 
         response.setHeader("X-Request-ID", requestId);
         response.setHeader("traceparent", "00-" + traceId + "-" + spanId + "-" + traceFlags);
@@ -95,10 +102,12 @@ public class TraceIdMdcFilter extends OncePerRequestFilter {
         try {
             filterChain.doFilter(request, response);
         } finally {
-            MDC.remove("traceId");
-            MDC.remove("spanId");
-            MDC.remove("traceFlags");
             MDC.remove("requestId");
+            if (!agentPopulated) {
+                MDC.remove("trace_id");
+                MDC.remove("span_id");
+                MDC.remove("trace_flags");
+            }
         }
     }
 

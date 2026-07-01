@@ -41,8 +41,11 @@ import java.util.regex.Pattern;
  * {@code X-Request-ID} headers on the response so clients and downstream
  * services can see and propagate the identity.
  *
- * <p>MDC keys populated (cleared in {@code finally}):
- * {@code traceId}, {@code spanId}, {@code traceFlags}, {@code requestId}.
+ * <p>MDC keys populated (cleared in {@code finally}): {@code requestId} always,
+ * plus OpenTelemetry-native {@code trace_id}/{@code span_id}/{@code trace_flags}
+ * (snake_case) ONLY when no OTel agent is active. When the agent has populated a
+ * valid span it already emits those keys, so this filter defers to it and does not
+ * write duplicate copies (the legacy camelCase keys are no longer emitted).
  *
  * <p>Spring Boot 2.x / {@code javax.servlet} version.
  */
@@ -71,9 +74,12 @@ public class TraceIdMdcFilter extends OncePerRequestFilter {
 
         Span currentSpan = Span.current();
         SpanContext ctx = currentSpan != null ? currentSpan.getSpanContext() : null;
+        boolean agentPopulated = ctx != null && ctx.isValid();
 
-        if (ctx != null && ctx.isValid()) {
-            // OTEL agent (or SDK) populated a span — defer to it.
+        if (agentPopulated) {
+            // OTEL agent (or SDK) populated a span — it already emits
+            // trace_id/span_id/trace_flags into MDC. Reuse its identity for the
+            // response headers, but do NOT write our own MDC copies below.
             traceId = ctx.getTraceId();
             spanId = ctx.getSpanId();
             traceFlags = ctx.getTraceFlags().asHex();
@@ -99,9 +105,14 @@ public class TraceIdMdcFilter extends OncePerRequestFilter {
         String requestId = inboundRequestId != null ? inboundRequestId : traceId;
 
         MDC.put("requestId", requestId);
-        MDC.put("traceId", traceId);
-        MDC.put("spanId", spanId);
-        MDC.put("traceFlags", traceFlags);
+        if (!agentPopulated) {
+            // Emit OpenTelemetry-native snake_case keys so logs are consistent with
+            // the agent and queryable in SigNoz. When the agent is present it owns
+            // these keys, so we skip them here to avoid non-queryable duplicates.
+            MDC.put("trace_id", traceId);
+            MDC.put("span_id", spanId);
+            MDC.put("trace_flags", traceFlags);
+        }
 
         response.setHeader("X-Request-ID", requestId);
         response.setHeader("traceparent", "00-" + traceId + "-" + spanId + "-" + traceFlags);
@@ -109,10 +120,12 @@ public class TraceIdMdcFilter extends OncePerRequestFilter {
         try {
             filterChain.doFilter(request, response);
         } finally {
-            MDC.remove("traceId");
-            MDC.remove("spanId");
-            MDC.remove("traceFlags");
             MDC.remove("requestId");
+            if (!agentPopulated) {
+                MDC.remove("trace_id");
+                MDC.remove("span_id");
+                MDC.remove("trace_flags");
+            }
         }
     }
 
