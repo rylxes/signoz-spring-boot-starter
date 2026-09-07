@@ -5,7 +5,9 @@ import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Logging-specific configuration nested under {@code signoz.logging.*}.
@@ -59,6 +61,26 @@ public class SigNozLoggingProperties {
      */
     private List<PatternConfig> customPatterns = new ArrayList<>();
 
+    /**
+     * Curated field-set profiles to apply, e.g. {@code [pci]}.
+     * See {@link io.signoz.springboot.masking.MaskingProfiles}.
+     */
+    private List<String> profiles = new ArrayList<>();
+
+    /**
+     * Per-field masking strategy, overriding {@code masked-fields} and any profile.
+     * Values use the notation parsed by
+     * {@link io.signoz.springboot.masking.MaskingStrategySpec}: {@code full},
+     * {@code partial:<prefix>:<suffix>} or {@code regex:<pattern>}.
+     *
+     * <pre>
+     * field-strategies:
+     *   cardPan: "partial:6:4"
+     *   clearPin: "full"
+     * </pre>
+     */
+    private Map<String, String> fieldStrategies = new LinkedHashMap<>();
+
     /** Whether to include the MDC context map in every log record. Default: {@code true}. */
     private boolean includeMdc = true;
 
@@ -106,6 +128,16 @@ public class SigNozLoggingProperties {
 
     public List<String> getMaskedFields() { return maskedFields; }
     public void setMaskedFields(List<String> maskedFields) { this.maskedFields = maskedFields; }
+
+    public List<String> getProfiles() { return profiles; }
+    public void setProfiles(List<String> profiles) {
+        this.profiles = profiles != null ? profiles : new ArrayList<>();
+    }
+
+    public Map<String, String> getFieldStrategies() { return fieldStrategies; }
+    public void setFieldStrategies(Map<String, String> fieldStrategies) {
+        this.fieldStrategies = fieldStrategies != null ? fieldStrategies : new LinkedHashMap<>();
+    }
 
     public List<PatternConfig> getCustomPatterns() { return customPatterns; }
     public void setCustomPatterns(List<PatternConfig> customPatterns) {

@@ -40,16 +40,35 @@ public class MaskingRegistry {
             return;
         }
 
-        // Register user-configured field names with FULL masking
+        // Precedence, least to most specific. Later stages overwrite earlier ones:
+        //   1. built-in card defaults
+        //   2. masked-fields          - the flat "mask these entirely" list
+        //   3. profiles               - a curated policy, so it refines the flat list
+        //                               (pci gives cardPan partial:6:4 rather than full)
+        //   4. field-strategies       - explicit per-field override, always wins
+
+        // 1. Built-in card defaults (show last 4).
+        PartialMaskingStrategy partialCard = new PartialMaskingStrategy(0, 4, '*');
+        for (String cardField : new String[]{"creditcard", "cardnumber", "card_number", "pan"}) {
+            fieldStrategies.put(cardField, partialCard);
+        }
+
+        // 2. User-configured field names, masked in full.
         FullMaskingStrategy full = new FullMaskingStrategy();
         for (String field : loggingProps.getMaskedFields()) {
             fieldStrategies.put(field.toLowerCase(), full);
         }
 
-        // Register credit card with partial masking (show last 4)
-        PartialMaskingStrategy partialCard = new PartialMaskingStrategy(0, 4, '*');
-        for (String cardField : new String[]{"creditcard", "cardnumber", "card_number", "pan"}) {
-            fieldStrategies.put(cardField, partialCard);
+        // 3. Curated profiles.
+        for (String profile : loggingProps.getProfiles()) {
+            fieldStrategies.putAll(MaskingProfiles.get(profile));
+        }
+
+        // 4. Explicit per-field strategies. Parse errors surface at startup rather than degrading
+        //    to no masking at runtime.
+        for (Map.Entry<String, String> entry : loggingProps.getFieldStrategies().entrySet()) {
+            fieldStrategies.put(entry.getKey().toLowerCase(),
+                    MaskingStrategySpec.parse(entry.getValue()));
         }
 
         // Register custom regex patterns
@@ -66,9 +85,14 @@ public class MaskingRegistry {
         messagePatterns.add(new RegexMaskingStrategy(
                 "(?i)(bearer\\s+)[A-Za-z0-9._\\-]{8,}",
                 "$1***"));
+        // Card numbers. The previous pattern was a fixed 4-4-4-4 group and so only ever matched
+        // 16-digit PANs; 19-digit PANs (Verve, UnionPay, some Maestro) passed straight through.
+        // ISO/IEC 7812 allows 13-19 digits, so match that range, anchored on a plausible major
+        // industry identifier (3-6) to avoid swallowing epoch timestamps and numeric ids, which
+        // start with 1 at present-day values.
         messagePatterns.add(new RegexMaskingStrategy(
-                "\\b(?:\\d{4}[\\s\\-]?){3}\\d{4}\\b",
-                "****-****-****-****"));
+                "\\b[3-6](?:[ -]?\\d){12,18}\\b",
+                "[card-number-redacted]"));
         messagePatterns.add(new RegexMaskingStrategy(
                 "\\b\\d{3}-\\d{2}-\\d{4}\\b",
                 "***-**-****"));
@@ -130,12 +154,23 @@ public class MaskingRegistry {
     }
 
     /**
-     * Masks all values in a simple JSON string by scanning for
-     * {@code "fieldName":"value"} patterns where the field is sensitive.
+     * Masks sensitive values in a rendered log payload.
+     *
+     * <p>Despite the name this is not JSON-only. It applies, in order: the message-level regex
+     * patterns, then {@code "field":"value"} JSON pairs, then bare {@code field=value} pairs. The
+     * last covers {@code application/x-www-form-urlencoded} bodies and Lombok's default
+     * {@code toString} rendering, both of which are common ways a secret reaches a log line without
+     * ever looking like JSON.
      */
     public String maskJsonString(String json) {
         if (!maskEnabled || json == null || json.isEmpty()) {
             return json;
+        }
+        // XML is parsed rather than pattern-matched: element text can be split across nodes and
+        // namespace prefixes separate the field name from its value, so a regex over the serialised
+        // form misses fields it appears to cover.
+        if (XmlMasker.looksLikeXml(json)) {
+            return XmlMasker.mask(json, this);
         }
         // Apply regex-based message patterns first
         String result = maskMessage(json);
@@ -144,19 +179,74 @@ public class MaskingRegistry {
         for (Map.Entry<String, MaskingStrategy> entry : fieldStrategies.entrySet()) {
             String fieldName = entry.getKey();
             MaskingStrategy strategy = entry.getValue();
-            // Pattern matches JSON field: "fieldName" : "value" or "fieldName":"value"
-            Pattern p = Pattern.compile(
-                    "(?i)(\"" + Pattern.quote(fieldName) + "\"\\s*:\\s*\")(.*?)(\")",
-                    Pattern.CASE_INSENSITIVE);
-            java.util.regex.Matcher m = p.matcher(result);
+            java.util.regex.Matcher m = jsonFieldPattern(fieldName).matcher(result);
             StringBuffer sb = new StringBuffer();
             while (m.find()) {
                 String masked = strategy.mask(fieldName, m.group(2));
-                m.appendReplacement(sb, m.group(1) + masked + m.group(3));
+                // quoteReplacement is required: appendReplacement treats '$' and '\' in the
+                // replacement as group syntax, so a secret or field name containing either would
+                // throw (dropping the whole masking pass) or splice in unintended text.
+                m.appendReplacement(sb,
+                        java.util.regex.Matcher.quoteReplacement(m.group(1) + masked + m.group(3)));
             }
             m.appendTail(sb);
             result = sb.toString();
+
+            // Then the `field=value` form. This covers two shapes JSON matching misses entirely:
+            // application/x-www-form-urlencoded bodies (the conventional OAuth2 token request) and
+            // Lombok's default toString rendering, which is what a DTO logged with {} produces.
+            java.util.regex.Matcher kv = kvFieldPattern(fieldName).matcher(result);
+            StringBuffer kvSb = new StringBuffer();
+            while (kv.find()) {
+                String masked = strategy.mask(fieldName, kv.group(2));
+                kv.appendReplacement(kvSb,
+                        java.util.regex.Matcher.quoteReplacement(kv.group(1) + masked));
+            }
+            kv.appendTail(kvSb);
+            result = kvSb.toString();
         }
         return result;
+    }
+
+    /**
+     * Compiled {@code "field":"value"} matchers, cached per field name.
+     *
+     * <p>These used to be compiled inside the masking loop, so every log event recompiled one
+     * pattern per registered field. That cost is paid on the hot path of every appender that masks.
+     */
+    private final Map<String, Pattern> jsonFieldPatterns =
+            new java.util.concurrent.ConcurrentHashMap<String, Pattern>();
+
+    private Pattern jsonFieldPattern(String fieldName) {
+        Pattern cached = jsonFieldPatterns.get(fieldName);
+        if (cached == null) {
+            cached = Pattern.compile(
+                    "(\"" + Pattern.quote(fieldName) + "\"\\s*:\\s*\")(.*?)(\")",
+                    Pattern.CASE_INSENSITIVE);
+            jsonFieldPatterns.put(fieldName, cached);
+        }
+        return cached;
+    }
+
+    private final Map<String, Pattern> kvFieldPatterns =
+            new java.util.concurrent.ConcurrentHashMap<String, Pattern>();
+
+    /**
+     * Matches {@code field=value} where the field name stands alone.
+     *
+     * <p>The leading {@code (?<![\w.-])} stops {@code pan} from matching inside {@code cardPan=},
+     * which would mask from the wrong offset and leave the first characters of the real value
+     * exposed. The value runs to the first separator that can legitimately end one in a form body,
+     * a query string or a Lombok {@code toString}.
+     */
+    private Pattern kvFieldPattern(String fieldName) {
+        Pattern cached = kvFieldPatterns.get(fieldName);
+        if (cached == null) {
+            cached = Pattern.compile(
+                    "(?<![\\w.-])(" + Pattern.quote(fieldName) + "\\s*=\\s*)([^&\\s,;)\"'}\\]]*)",
+                    Pattern.CASE_INSENSITIVE);
+            kvFieldPatterns.put(fieldName, cached);
+        }
+        return cached;
     }
 }
