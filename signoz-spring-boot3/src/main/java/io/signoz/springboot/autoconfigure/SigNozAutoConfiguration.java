@@ -1,6 +1,7 @@
 package io.signoz.springboot.autoconfigure;
 
 import io.signoz.springboot.masking.MaskingRegistry;
+import io.signoz.springboot.masking.ObjectMasker;
 import io.signoz.springboot.properties.SigNozAlertProperties;
 import io.signoz.springboot.properties.SigNozAsyncProperties;
 import io.signoz.springboot.properties.SigNozAuditProperties;
@@ -76,5 +77,16 @@ public class SigNozAutoConfiguration {
     @ConditionalOnMissingBean
     public MaskingRegistry maskingRegistry(SigNozProperties props) {
         return new MaskingRegistry(props.getLogging());
+    }
+
+    /**
+     * Masks a DTO before it is handed to a logger, so the sensitive value never reaches the logging
+     * event in the first place. Registered explicitly rather than component-scanned: this starter
+     * contributes beans through auto-configuration only.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public ObjectMasker objectMasker(MaskingRegistry maskingRegistry) {
+        return new ObjectMasker(maskingRegistry);
     }
 }
