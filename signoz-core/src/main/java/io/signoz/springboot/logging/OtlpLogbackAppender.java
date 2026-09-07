@@ -13,6 +13,7 @@ import io.opentelemetry.sdk.logs.SdkLoggerProvider;
 import io.opentelemetry.sdk.logs.export.BatchLogRecordProcessor;
 import io.opentelemetry.sdk.resources.Resource;
 import io.opentelemetry.semconv.ResourceAttributes;
+import io.signoz.springboot.masking.MaskingRegistry;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -53,6 +54,8 @@ public class OtlpLogbackAppender extends AppenderBase<ILoggingEvent> {
     private long exportTimeoutMs = 5000L;
     private Map<String, String> headers = new HashMap<String, String>();
 
+    private MaskingRegistry maskingRegistry;
+
     private SdkLoggerProvider loggerProvider;
     private io.opentelemetry.api.logs.Logger otelLogger;
 
@@ -86,6 +89,11 @@ public class OtlpLogbackAppender extends AppenderBase<ILoggingEvent> {
                     .build();
 
             this.otelLogger = loggerProvider.get(serviceName);
+            if (maskingRegistry == null) {
+                addWarn("[SigNoz] OTLP log appender started with no MaskingRegistry - "
+                        + "log bodies will be exported UNMASKED. Wire setMaskingRegistry(..) "
+                        + "if you configured this appender in XML.");
+            }
             super.start();
         } catch (Exception e) {
             addError("[SigNoz] Failed to initialize OTLP log appender: " + e.getMessage(), e);
@@ -103,14 +111,16 @@ public class OtlpLogbackAppender extends AppenderBase<ILoggingEvent> {
                     .setTimestamp(event.getTimeStamp(), TimeUnit.MILLISECONDS)
                     .setSeverity(toSeverity(event.getLevel()))
                     .setSeverityText(event.getLevel().toString())
-                    .setBody(event.getFormattedMessage());
+                    .setBody(maskBody(event.getFormattedMessage()));
 
-            // Attach MDC fields as attributes
+            // Attach MDC fields as attributes, masked by key. MDC routinely carries userId,
+            // sessionId and similar, and any key listed in signoz.logging.masked-fields must be
+            // masked here as well as in the JSON encoder.
             Map<String, String> mdc = event.getMDCPropertyMap();
             if (mdc != null && !mdc.isEmpty()) {
                 AttributesBuilder attrs = Attributes.builder();
                 for (Map.Entry<String, String> entry : mdc.entrySet()) {
-                    attrs.put("mdc." + entry.getKey(), entry.getValue());
+                    attrs.put("mdc." + entry.getKey(), maskField(entry.getKey(), entry.getValue()));
                 }
                 builder.setAllAttributes(attrs.build());
             }
@@ -135,6 +145,47 @@ public class OtlpLogbackAppender extends AppenderBase<ILoggingEvent> {
             }
         }
         super.stop();
+    }
+
+    // --- Masking ---
+
+    /**
+     * Masks the log body before it leaves the process.
+     *
+     * <p>This appender is an export path in its own right, so it cannot rely on the masking done
+     * by {@link SigNozJsonEncoder}: that runs inside the console appender's encoder and is invisible
+     * to every other appender. Masking has to be applied here too, or {@code
+     * signoz.logging.masked-fields} silently protects stdout while this appender ships the raw
+     * message to the collector.
+     *
+     * <p>{@link MaskingRegistry#maskJsonString(String)} is used rather than {@code maskMessage}
+     * because it is a superset: it applies the message-level regex patterns first and then masks
+     * {@code "field":"value"} pairs, which is what a body serialised from a DTO looks like. It
+     * degrades to plain {@code maskMessage} behaviour on free-form text.
+     */
+    private String maskBody(String formattedMessage) {
+        if (maskingRegistry == null) {
+            return formattedMessage;
+        }
+        try {
+            return maskingRegistry.maskJsonString(formattedMessage);
+        } catch (Exception e) {
+            // Fail closed: emitting the raw body here is the failure this method exists to prevent.
+            addError("[SigNoz] Masking failed; withholding log body", e);
+            return "[signoz:masking-failed:body-withheld]";
+        }
+    }
+
+    private String maskField(String key, String value) {
+        if (maskingRegistry == null) {
+            return value;
+        }
+        try {
+            return maskingRegistry.mask(key, value);
+        } catch (Exception e) {
+            addError("[SigNoz] Masking failed for MDC key " + key, e);
+            return "[signoz:masking-failed]";
+        }
     }
 
     // --- Level mapping ---
@@ -170,4 +221,11 @@ public class OtlpLogbackAppender extends AppenderBase<ILoggingEvent> {
 
     public void setHeaders(Map<String, String> headers) { this.headers = headers; }
     public Map<String, String> getHeaders() { return headers; }
+
+    /**
+     * Injected by {@code SigNozLoggingAutoConfiguration}. When configured via XML instead, wire
+     * this to the {@code MaskingRegistry} bean - without it this appender exports unmasked bodies.
+     */
+    public void setMaskingRegistry(MaskingRegistry maskingRegistry) { this.maskingRegistry = maskingRegistry; }
+    public MaskingRegistry getMaskingRegistry() { return maskingRegistry; }
 }

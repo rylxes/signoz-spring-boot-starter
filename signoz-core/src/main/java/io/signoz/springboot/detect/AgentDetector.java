@@ -11,8 +11,15 @@ import org.slf4j.LoggerFactory;
  * is active in the current JVM.
  *
  * <p>When the agent is present, the starter skips its own OTLP export (traces, logs,
- * metrics) to avoid duplicate data. App-level features (masking, audit, request logging)
- * remain active regardless.
+ * metrics) to avoid duplicate data.
+ *
+ * <p><strong>Masking caveat:</strong> app-level features (audit, request logging) remain active,
+ * but log <em>masking</em> does not survive this hand-off. The agent's own logback appender reads
+ * the {@code ILoggingEvent} directly and applies none of the {@code signoz.logging.masked-fields}
+ * rules, so when the agent handles log export those rules protect stdout only. Set
+ * {@code OTEL_INSTRUMENTATION_LOGBACK_APPENDER_ENABLED=false} to keep log export (and therefore
+ * masking) with this starter. {@code SigNozLoggingAutoConfiguration} warns at startup when this
+ * combination is detected.
  *
  * <p>Detection uses three strategies (checked in order):
  * <ol>
@@ -57,6 +64,44 @@ public final class AgentDetector {
             }
             return cached;
         }
+    }
+
+    /**
+     * Returns {@code true} when the agent is present <em>and</em> still exporting logs itself.
+     *
+     * <p>Agent presence alone is the wrong test for the log pipeline. A deployment that wants the
+     * agent for traces and metrics but masked log export from this starter turns the agent's log
+     * appender off with {@code OTEL_INSTRUMENTATION_LOGBACK_APPENDER_ENABLED=false} (or
+     * {@code OTEL_LOGS_EXPORTER=none}). Skipping our OTLP appender purely because the agent exists
+     * would then leave that deployment with no OTLP logs at all.
+     *
+     * <p>So: defer to the agent only while the agent is actually handling logs. Otherwise attach
+     * {@code OtlpLogbackAppender}, which masks.
+     */
+    public static boolean isAgentHandlingLogs() {
+        if (!isAgentPresent()) {
+            return false;
+        }
+        if (isDisabled("otel.instrumentation.logback-appender.enabled",
+                "OTEL_INSTRUMENTATION_LOGBACK_APPENDER_ENABLED")) {
+            return false;
+        }
+        return !"none".equalsIgnoreCase(setting("otel.logs.exporter", "OTEL_LOGS_EXPORTER"));
+    }
+
+    /** True when the setting is explicitly present and false-y. Absent means "agent default: on". */
+    private static boolean isDisabled(String systemProperty, String envVar) {
+        String value = setting(systemProperty, envVar);
+        return value != null && "false".equalsIgnoreCase(value.trim());
+    }
+
+    /** System property wins over environment variable, matching the OTel agent's own precedence. */
+    private static String setting(String systemProperty, String envVar) {
+        String value = System.getProperty(systemProperty);
+        if (value == null || value.isEmpty()) {
+            value = System.getenv(envVar);
+        }
+        return (value == null || value.isEmpty()) ? null : value;
     }
 
     private static boolean detect() {

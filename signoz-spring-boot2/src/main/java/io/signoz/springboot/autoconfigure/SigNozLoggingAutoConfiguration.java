@@ -101,8 +101,20 @@ public class SigNozLoggingAutoConfiguration {
                     || mode == SigNozLoggingProperties.LoggingMode.BOTH;
 
             if (otlp) {
-                if (AgentDetector.isAgentPresent()) {
+                if (AgentDetector.isAgentHandlingLogs()) {
                     log.info("[SigNoz] OpenTelemetry Java Agent detected — skipping OTLP log appender (agent handles log export)");
+                    // The agent's own logback appender reads the LoggingEvent directly and applies
+                    // no masking. Deferring log export to it therefore silently disables every
+                    // masking rule configured here, which reads as "masking is on" while raw
+                    // bodies leave the process. Say so loudly rather than let it pass unnoticed.
+                    if (loggingProps.isMaskEnabled() && !loggingProps.getMaskedFields().isEmpty()) {
+                        log.warn("[SigNoz] signoz.logging.masked-fields is configured ({} fields) but log"
+                                + " export is being handled by the OpenTelemetry Java Agent, which does"
+                                + " NOT apply masking. Exported log bodies will be UNMASKED. Either set"
+                                + " OTEL_INSTRUMENTATION_LOGBACK_APPENDER_ENABLED=false so this starter"
+                                + " owns log export, or mask at the call site.",
+                                loggingProps.getMaskedFields().size());
+                    }
                 } else if (rootLogger.getAppender("SIGNOZ_OTLP") == null) {
                     OtlpLogbackAppender otlpAppender = new OtlpLogbackAppender();
                     otlpAppender.setName("SIGNOZ_OTLP");
@@ -112,6 +124,7 @@ public class SigNozLoggingAutoConfiguration {
                     otlpAppender.setServiceVersion(props.getServiceVersion());
                     otlpAppender.setEnvironment(props.getEnvironment());
                     otlpAppender.setHeaders(props.getHeaders());
+                    otlpAppender.setMaskingRegistry(maskingRegistry);
                     otlpAppender.start();
                     rootLogger.addAppender(otlpAppender);
                     log.info("[SigNoz] OTLP log appender attached → {}", props.getEndpoint());
