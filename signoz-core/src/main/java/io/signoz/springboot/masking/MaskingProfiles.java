@@ -33,6 +33,17 @@ public final class MaskingProfiles {
      */
     public static final String PCI = "pci";
 
+    /**
+     * Personal data that is not card data: government identifiers, bank account numbers, contact
+     * details and names.
+     *
+     * <p>Kept separate from {@link #PCI} because the two are driven by different obligations and
+     * different services need different halves. A card processor wants both; a merchant-onboarding
+     * service wants only this one. Profiles are additive, so {@code profiles: [pci, pii]} applies
+     * each in turn.
+     */
+    public static final String PII = "pii";
+
     private static final Map<String, Map<String, MaskingStrategy>> PROFILES;
 
     static {
@@ -71,9 +82,37 @@ public final class MaskingProfiles {
         pci.put("token", full);
         pci.put("otp", full);
 
+        Map<String, MaskingStrategy> pii = new LinkedHashMap<String, MaskingStrategy>();
+
+        // Government and financial identifiers.
+        pii.put("bvn", full);
+        pii.put("nin", full);
+        pii.put("ssn", full);
+        pii.put("taxid", full);
+        pii.put("passportnumber", full);
+
+        // Bank account numbers keep the last four, which is what reconciliation and support need
+        // and what customers are used to seeing.
+        MaskingStrategy accountNumber = new PartialMaskingStrategy(0, 4, '*');
+        pii.put("accountnumber", accountNumber);
+        pii.put("account_number", accountNumber);
+        pii.put("originatoraccountnumber", accountNumber);
+        pii.put("destinationaccountnumber", accountNumber);
+
+        // Contact details and names.
+        for (String field : new String[]{
+                "email", "emailaddress", "merchantemail",
+                "phone", "phonenumber", "msisdn", "merchantphone",
+                "address", "merchantaddress", "residentialaddress",
+                "dateofbirth", "dob",
+                "accountname", "customername", "firstname", "lastname", "originatorname"}) {
+            pii.put(field, full);
+        }
+
         Map<String, Map<String, MaskingStrategy>> all =
                 new LinkedHashMap<String, Map<String, MaskingStrategy>>();
         all.put(PCI, Collections.unmodifiableMap(pci));
+        all.put(PII, Collections.unmodifiableMap(pii));
         PROFILES = Collections.unmodifiableMap(all);
     }
 
