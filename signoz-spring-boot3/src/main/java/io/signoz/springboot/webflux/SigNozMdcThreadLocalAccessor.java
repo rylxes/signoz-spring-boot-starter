@@ -37,8 +37,17 @@ public class SigNozMdcThreadLocalAccessor implements ThreadLocalAccessor<Map<Str
         return current.isEmpty() ? null : Collections.unmodifiableMap(current);
     }
 
+    /**
+     * Replaces the SigNoz MDC keys with {@code value}'s entries. Keys absent from
+     * {@code value} are cleared, so a signal for one request can never pick up another
+     * request's values (e.g. its {@code userId}) left on the thread.
+     */
     @Override
     public void setValue(Map<String, String> value) {
+        setValue();
+        if (value == null) {
+            return;
+        }
         for (Map.Entry<String, String> e : value.entrySet()) {
             if (e.getValue() != null) {
                 MDC.put(e.getKey(), e.getValue());
@@ -55,7 +64,6 @@ public class SigNozMdcThreadLocalAccessor implements ThreadLocalAccessor<Map<Str
 
     @Override
     public void restore(Map<String, String> previousValue) {
-        setValue();
         setValue(previousValue);
     }
 
