@@ -31,7 +31,7 @@ class SigNozJsonEncoderTest {
 
     @Disabled("logstash-logback-encoder 7.4 calls ILoggingEvent.getInstant() (added in Logback 1.3+);" +
               " signoz-core test classpath has Logback 1.2.13 to match Spring Boot 2.x. " +
-              "Full encode() coverage is provided by signoz-spring-boot3 tests (Logback 1.4.x).")
+              "Full encode() coverage is in SigNozJsonEncoderEscapedJsonMaskingTest in signoz-spring-boot2/3.")
     @Test
     void encodeWithNullRegistryProducesNonNullBytes() {
         encoder.start();
