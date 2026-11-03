@@ -229,6 +229,15 @@ MaskingRegistry (Spring @Component)
 `MaskingRegistry.maskMessage(text)` — regex scan over free-form log messages
 `MaskingRegistry.maskJsonString(json)` — field-based + pattern scan over a JSON string
 
+**Mask before serialising.** Log output must be masked value by value *before* it is
+written into a JSON line. Once a JSON payload in a log message is embedded in the line,
+its quotes are escaped (`\"password\":\"…\"`) and `maskJsonString`'s `"field":"value"`
+matching no longer sees it. `SigNozJsonEncoder` therefore masks the event's formatted
+message (`maskJsonString`) and MDC (sensitive keys with their field strategy, others with
+`maskMessage`) through `MaskedLoggingEvent` before `LogstashEncoder` serialises it, then
+runs `maskJsonString` over the whole line for everything else (stack traces, arguments,
+custom providers). If masking throws, a minimal line with the content withheld is written.
+
 ---
 
 ## Adding a New Masking Strategy

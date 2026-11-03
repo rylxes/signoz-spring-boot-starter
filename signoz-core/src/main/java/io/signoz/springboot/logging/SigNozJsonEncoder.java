@@ -5,6 +5,8 @@ import io.signoz.springboot.masking.MaskingRegistry;
 import net.logstash.logback.encoder.LogstashEncoder;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 
 /**
  * Custom Logback encoder that wraps {@link LogstashEncoder} (Logstash-compatible JSON)
@@ -12,11 +14,16 @@ import java.io.IOException;
  *
  * <p>The masking pipeline:
  * <ol>
- *   <li>The parent {@code LogstashEncoder} serialises the event to a JSON byte array.</li>
- *   <li>The JSON string is passed through {@link MaskingRegistry#maskJsonString(String)}
- *       which replaces sensitive field values in the JSON.</li>
- *   <li>The masked JSON bytes are returned to the appender.</li>
+ *   <li>The event's formatted message and MDC are masked first (see {@link MaskedLoggingEvent}),
+ *       because a JSON payload inside the message is escaped once embedded in the line and
+ *       {@link MaskingRegistry#maskJsonString(String)} cannot match its fields afterwards.</li>
+ *   <li>The parent {@code LogstashEncoder} serialises the masked event.</li>
+ *   <li>The whole line is passed through {@code maskJsonString} for everything else
+ *       (stack traces, arguments, custom providers).</li>
  * </ol>
+ *
+ * <p>If masking throws, a minimal line with the content withheld is written instead of the
+ * unmasked line.
  *
  * <p>Configured in {@code logback-signoz.xml} (or programmatically):
  * <pre>{@code
@@ -27,6 +34,9 @@ import java.io.IOException;
  * }</pre>
  */
 public class SigNozJsonEncoder extends LogstashEncoder {
+
+    /** Message written instead of the event's content when masking throws. */
+    static final String BODY_WITHHELD = "[signoz:masking-failed:body-withheld]";
 
     private MaskingRegistry maskingRegistry;
 
@@ -48,20 +58,40 @@ public class SigNozJsonEncoder extends LogstashEncoder {
 
     @Override
     public byte[] encode(ILoggingEvent event) {
-        byte[] originalBytes = super.encode(event);
-
-        if (maskingRegistry == null || originalBytes == null) {
-            return originalBytes;
+        if (maskingRegistry == null) {
+            return super.encode(event);
         }
-
         try {
-            String json = new String(originalBytes, "UTF-8");
-            String maskedJson = maskingRegistry.maskJsonString(json);
-            return maskedJson.getBytes("UTF-8");
+            // Mask the message and MDC before serialisation: once a JSON payload in the message
+            // is embedded in the line, its quotes are escaped and field masking cannot see it.
+            byte[] bytes = super.encode(MaskedLoggingEvent.wrap(event, maskingRegistry));
+            if (bytes == null) {
+                return null;
+            }
+            // Then the whole line, for everything else the encoder writes (stack traces,
+            // arguments, custom providers).
+            String masked = maskingRegistry.maskJsonString(new String(bytes, StandardCharsets.UTF_8));
+            return masked.getBytes(StandardCharsets.UTF_8);
         } catch (Exception e) {
-            // On any error, return original unmasked bytes rather than dropping the log
-            return originalBytes;
+            // Fail closed: writing the unmasked line is the failure masking exists to prevent.
+            addError("[SigNoz] Masking failed; withholding log content", e);
+            return withheld(event);
         }
+    }
+
+    /** A minimal line that keeps the event visible without any of its content. */
+    static byte[] withheld(ILoggingEvent event) {
+        StringBuilder sb = new StringBuilder(160);
+        sb.append("{\"@timestamp\":\"").append(Instant.ofEpochMilli(event.getTimeStamp()))
+                .append("\",\"level\":\"").append(event.getLevel())
+                .append("\",\"logger_name\":\"").append(jsonSafe(event.getLoggerName()))
+                .append("\",\"message\":\"").append(BODY_WITHHELD).append("\"}")
+                .append(System.lineSeparator());
+        return sb.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    private static String jsonSafe(String s) {
+        return s == null ? "" : s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     @Override
