@@ -124,7 +124,7 @@ the services talk to each other.
 | Protocol | Producer / outbound | Consumer / inbound | Wire artefact |
 |---|---|---|---|
 | HTTP | `TracingRestTemplateInterceptor` / `TracingWebClientFilter` | `TraceIdMdcFilter` (servlet) / `TraceIdWebFilter` (WebFlux) | `traceparent` HTTP header |
-| Kafka | `TracingProducerInterceptor` | `TracingConsumerInterceptor` | record headers (`traceparent`, `traceId`, `spanId`) |
+| Kafka | `TracingProducerInterceptor` | `TracingConsumerInterceptor` | record headers (`traceparent`; legacy `traceId`, `spanId` for older consumers) |
 | SQS | `TracingSqsRequestHandler` (AWS SDK v1) | `@SqsListener` aspect (awspring v2/v3 / legacy) | SQS `MessageAttributes` (`traceparent`) |
 | gRPC | `TracingGrpcClientInterceptor` | `TracingGrpcServerInterceptor` | gRPC `Metadata` (`traceparent`) |
 | WebSocket / STOMP | `TracingStompChannelInterceptor` (OUTBOUND) + handshake interceptor | `TracingStompChannelInterceptor` (INBOUND) + handshake interceptor | STOMP native header + WebSocket session attribute |
@@ -174,11 +174,13 @@ fills the gap. There is no double-instrumentation path.
   propagation is exact. Thread MDC is set while the filter chain is subscribed;
   on Spring Boot 3 Reactor's automatic context propagation restores it on every
   hop, on Spring Boot 2 handlers use `ReactiveMdc.onNext(...)` past the first hop.
-- **MDC key names**: `TraceIdMdcFilter` and `TraceIdWebFilter` write the
-  OTel-native `trace_id` / `span_id` / `trace_flags`; the messaging and RPC
-  consumers still write `traceId` / `spanId` / `traceFlags`.
-  `TraceContextCodec.mdcTraceparent()` reads the snake_case family first and
-  falls back to camelCase, never mixing the two.
+- **MDC key names**: every inbound path writes the OTel-native `trace_id` /
+  `span_id` / `trace_flags` (the same keys the OTel agent uses): both HTTP filters
+  via `TraceIdentity`, and the Kafka, SQS, gRPC and STOMP consumers via
+  `TraceContextCodec.putMdc(...)`. `TraceContextCodec.mdcTraceparent()` reads the
+  snake_case family first and falls back to the legacy camelCase keys (which
+  application code may still write), never mixing the two, and only emits a
+  `traceparent` whose values are valid hex.
 
 ---
 

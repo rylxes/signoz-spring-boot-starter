@@ -71,10 +71,14 @@ public class SigNozLoggingAutoConfiguration {
         return () -> configureLogback(maskingRegistry);
     }
 
-    /** MDC keys to auto-inject into JSON log output for trace correlation. */
+    /**
+     * MDC keys to auto-inject into JSON log output for trace correlation: the OTel-native
+     * snake_case keys every SigNoz filter and interceptor writes (and the OTel agent
+     * uses), plus the legacy camelCase keys for application code that still writes them.
+     */
     private static final List<String> TRACE_MDC_KEYS = Arrays.asList(
-            "traceId", "spanId", "traceFlags", "requestId",
-            "trace_id", "span_id"  // OTEL agent uses underscored keys
+            "trace_id", "span_id", "trace_flags", "requestId",
+            "traceId", "spanId", "traceFlags"
     );
 
     private void configureLogback(MaskingRegistry maskingRegistry) {

@@ -9,6 +9,7 @@ import io.opentelemetry.context.Scope;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.Header;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 
 import java.nio.charset.StandardCharsets;
 
@@ -58,6 +59,33 @@ class TracingProducerInterceptorTest {
             Header traceId = result.headers().lastHeader("traceId");
             assertThat(traceId).isNotNull();
         }
+    }
+
+    @Test
+    void onSendPropagatesFromTheAgentlessMdcWhenNoSpanIsActive() {
+        // What the HTTP filters write when no OTel agent is running.
+        MDC.put("trace_id", "0af7651916cd43dd8448eb211c80319c");
+        MDC.put("span_id", "b7ad6b7169203331");
+        MDC.put("trace_flags", "01");
+        try {
+            ProducerRecord<Object, Object> result = new TracingProducerInterceptor()
+                    .onSend(new ProducerRecord<>("test-topic", "key", "value"));
+
+            assertThat(new String(result.headers().lastHeader("traceparent").value(), StandardCharsets.UTF_8))
+                    .isEqualTo("00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01");
+            assertThat(new String(result.headers().lastHeader("traceId").value(), StandardCharsets.UTF_8))
+                    .isEqualTo("0af7651916cd43dd8448eb211c80319c");
+        } finally {
+            MDC.clear();
+        }
+    }
+
+    @Test
+    void onSendAddsNoHeadersWithoutAnyTraceIdentity() {
+        ProducerRecord<Object, Object> result = new TracingProducerInterceptor()
+                .onSend(new ProducerRecord<>("test-topic", "key", "value"));
+
+        assertThat(result.headers().toArray()).isEmpty();
     }
 
     @Test

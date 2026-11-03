@@ -63,9 +63,7 @@ public class TracingStompChannelInterceptor implements ChannelInterceptor {
     public void afterSendCompletion(Message<?> message, MessageChannel channel,
                                     boolean sent, Exception ex) {
         if (direction == Direction.INBOUND && Boolean.TRUE.equals(POPULATED.get())) {
-            MDC.remove("traceId");
-            MDC.remove("spanId");
-            MDC.remove("traceFlags");
+            TraceContextCodec.clearMdc();
             MDC.remove("requestId");
             POPULATED.remove();
         }
@@ -84,9 +82,7 @@ public class TracingStompChannelInterceptor implements ChannelInterceptor {
         if (parsed == null) {
             return;
         }
-        MDC.put("traceId", parsed.traceId);
-        MDC.put("spanId", parsed.spanId);
-        MDC.put("traceFlags", parsed.traceFlags);
+        TraceContextCodec.putMdc(parsed);
 
         String requestId = accessor.getFirstNativeHeader("X-Request-ID");
         if (requestId == null && accessor.getSessionAttributes() != null) {

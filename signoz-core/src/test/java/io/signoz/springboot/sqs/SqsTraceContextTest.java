@@ -25,9 +25,9 @@ class SqsTraceContextTest {
         boolean populated = SqsTraceContext.populateMdcFromHeaders(headers);
 
         assertThat(populated).isTrue();
-        assertThat(MDC.get("traceId")).isEqualTo("0af7651916cd43dd8448eb211c80319c");
-        assertThat(MDC.get("spanId")).isEqualTo("b7ad6b7169203331");
-        assertThat(MDC.get("traceFlags")).isEqualTo("01");
+        assertThat(MDC.get("trace_id")).isEqualTo("0af7651916cd43dd8448eb211c80319c");
+        assertThat(MDC.get("span_id")).isEqualTo("b7ad6b7169203331");
+        assertThat(MDC.get("trace_flags")).isEqualTo("01");
         assertThat(MDC.get("requestId")).isEqualTo("req-123");
     }
 
@@ -47,7 +47,7 @@ class SqsTraceContextTest {
         headers.put("traceparent", "garbage");
 
         assertThat(SqsTraceContext.populateMdcFromHeaders(headers)).isFalse();
-        assertThat(MDC.get("traceId")).isNull();
+        assertThat(MDC.get("trace_id")).isNull();
     }
 
     @Test
@@ -58,17 +58,17 @@ class SqsTraceContextTest {
 
     @Test
     void clearMdcRemovesOnlyTracingKeys() {
-        MDC.put("traceId", "x");
-        MDC.put("spanId", "y");
-        MDC.put("traceFlags", "01");
+        MDC.put("trace_id", "x");
+        MDC.put("span_id", "y");
+        MDC.put("trace_flags", "01");
         MDC.put("requestId", "z");
         MDC.put("unrelated", "keep-me");
 
         SqsTraceContext.clearMdc();
 
-        assertThat(MDC.get("traceId")).isNull();
-        assertThat(MDC.get("spanId")).isNull();
-        assertThat(MDC.get("traceFlags")).isNull();
+        assertThat(MDC.get("trace_id")).isNull();
+        assertThat(MDC.get("span_id")).isNull();
+        assertThat(MDC.get("trace_flags")).isNull();
         assertThat(MDC.get("requestId")).isNull();
         assertThat(MDC.get("unrelated")).isEqualTo("keep-me");
 

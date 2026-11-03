@@ -63,6 +63,29 @@ class TraceContextCodecMdcTest {
     }
 
     @Test
+    void ignoresMalformedMdcValuesInsteadOfSendingAnInvalidHeader() {
+        MDC.put("traceId", "x");
+        MDC.put("spanId", "y");
+
+        assertThat(TraceContextCodec.currentTraceparent()).isNull();
+    }
+
+    @Test
+    void putMdcWritesOnlySnakeCaseKeysAndClearMdcRemovesThem() {
+        TraceContextCodec.putMdc(TraceContextCodec.parse("00-" + TRACE_ID + "-" + SPAN_ID + "-01"));
+
+        assertThat(MDC.get("trace_id")).isEqualTo(TRACE_ID);
+        assertThat(MDC.get("span_id")).isEqualTo(SPAN_ID);
+        assertThat(MDC.get("trace_flags")).isEqualTo("01");
+        assertThat(MDC.get("traceId")).isNull();
+
+        TraceContextCodec.clearMdc();
+        assertThat(MDC.get("trace_id")).isNull();
+        assertThat(MDC.get("span_id")).isNull();
+        assertThat(MDC.get("trace_flags")).isNull();
+    }
+
+    @Test
     void returnsNullWhenMdcIsEmpty() {
         assertThat(TraceContextCodec.currentTraceparent()).isNull();
     }

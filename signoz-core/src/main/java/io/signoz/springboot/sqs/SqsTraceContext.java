@@ -52,9 +52,7 @@ public final class SqsTraceContext {
         if (parsed == null) {
             return false;
         }
-        MDC.put("traceId", parsed.traceId);
-        MDC.put("spanId", parsed.spanId);
-        MDC.put("traceFlags", parsed.traceFlags);
+        TraceContextCodec.putMdc(parsed);
 
         Object requestId = headers.get(REQUEST_ID_ATTRIBUTE);
         if (requestId == null) {
@@ -70,9 +68,7 @@ public final class SqsTraceContext {
 
     /** Clear the MDC keys populated by {@link #populateMdcFromHeaders(Map)}. */
     public static void clearMdc() {
-        MDC.remove("traceId");
-        MDC.remove("spanId");
-        MDC.remove("traceFlags");
+        TraceContextCodec.clearMdc();
         MDC.remove("requestId");
     }
 }
