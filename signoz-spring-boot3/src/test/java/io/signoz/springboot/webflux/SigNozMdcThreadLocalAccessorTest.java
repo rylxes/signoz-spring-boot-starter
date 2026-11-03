@@ -48,6 +48,19 @@ class SigNozMdcThreadLocalAccessorTest {
     }
 
     @Test
+    void ignoresNonSigNozKeysInTheContextMapSoTheyCannotLeak() {
+        Map<String, String> value = new java.util.HashMap<>();
+        value.put("requestId", "req-b");
+        value.put("tenant", "acme");
+
+        accessor.setValue(value);
+        accessor.setValue();
+
+        assertThat(MDC.get("tenant")).isNull();
+        assertThat(MDC.get("requestId")).isNull();
+    }
+
+    @Test
     void getValueIsNullWhenNoSigNozKeysArePresent() {
         MDC.put("tenant", "acme");
         assertThat(accessor.getValue()).isNull();

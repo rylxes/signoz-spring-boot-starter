@@ -48,9 +48,12 @@ public class SigNozMdcThreadLocalAccessor implements ThreadLocalAccessor<Map<Str
         if (value == null) {
             return;
         }
-        for (Map.Entry<String, String> e : value.entrySet()) {
-            if (e.getValue() != null) {
-                MDC.put(e.getKey(), e.getValue());
+        // Only the SigNoz keys: setValue() clears exactly these, so any other key written
+        // here could never be cleared and would leak into later work on the thread.
+        for (String key : ReactiveMdc.KNOWN_KEYS) {
+            String v = value.get(key);
+            if (v != null) {
+                MDC.put(key, v);
             }
         }
     }
