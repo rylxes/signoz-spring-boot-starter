@@ -14,7 +14,11 @@ import java.util.regex.Pattern;
  * <p>Encode preference order:
  * <ol>
  *   <li>The active OTEL {@link SpanContext} (set by the agent or the starter SDK).</li>
- *   <li>MDC values populated by {@code TraceIdMdcFilter} for agentless deployments.</li>
+ *   <li>MDC values for agentless deployments. The OTel-native snake_case keys
+ *       ({@code trace_id}, {@code span_id}, {@code trace_flags}) written by
+ *       {@code TraceIdMdcFilter} are read first; the legacy camelCase keys
+ *       ({@code traceId}, {@code spanId}, {@code traceFlags}) still written by the
+ *       Kafka, SQS, gRPC and STOMP consumers are the fallback.</li>
  * </ol>
  *
  * <p>Decode parses a W3C {@code traceparent} of the form
@@ -23,6 +27,16 @@ import java.util.regex.Pattern;
 public final class TraceContextCodec {
 
     public static final String TRACEPARENT_HEADER = "traceparent";
+
+    /** OTel-native MDC keys, written by {@code TraceIdMdcFilter} and the OTel agent. */
+    public static final String MDC_TRACE_ID = "trace_id";
+    public static final String MDC_SPAN_ID = "span_id";
+    public static final String MDC_TRACE_FLAGS = "trace_flags";
+
+    /** Legacy camelCase MDC keys, still written by the messaging/RPC consumers. */
+    public static final String MDC_LEGACY_TRACE_ID = "traceId";
+    public static final String MDC_LEGACY_SPAN_ID = "spanId";
+    public static final String MDC_LEGACY_TRACE_FLAGS = "traceFlags";
 
     private static final Pattern TRACEPARENT =
             Pattern.compile("^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$");
@@ -40,16 +54,32 @@ public final class TraceContextCodec {
         if (ctx.isValid()) {
             return format(ctx.getTraceId(), ctx.getSpanId(), ctx.getTraceFlags().asHex());
         }
-        String traceId = MDC.get("traceId");
-        String spanId = MDC.get("spanId");
-        if (traceId == null || traceId.isEmpty() || spanId == null || spanId.isEmpty()) {
+        return mdcTraceparent();
+    }
+
+    /**
+     * Build a {@code traceparent} from the current thread's MDC only, or {@code null}
+     * when the MDC carries no trace identity. A trace/span pair is taken from one key
+     * family (snake_case preferred) so the two halves can never come from different
+     * writers.
+     */
+    public static String mdcTraceparent() {
+        String traceId = MDC.get(MDC_TRACE_ID);
+        String spanId = MDC.get(MDC_SPAN_ID);
+        String flags = MDC.get(MDC_TRACE_FLAGS);
+        if (isEmpty(traceId) || isEmpty(spanId)) {
+            traceId = MDC.get(MDC_LEGACY_TRACE_ID);
+            spanId = MDC.get(MDC_LEGACY_SPAN_ID);
+            flags = MDC.get(MDC_LEGACY_TRACE_FLAGS);
+        }
+        if (isEmpty(traceId) || isEmpty(spanId)) {
             return null;
         }
-        String flags = MDC.get("traceFlags");
-        if (flags == null || flags.isEmpty()) {
-            flags = "01";
-        }
-        return format(traceId, spanId, flags);
+        return format(traceId, spanId, isEmpty(flags) ? "01" : flags);
+    }
+
+    private static boolean isEmpty(String value) {
+        return value == null || value.isEmpty();
     }
 
     /**
