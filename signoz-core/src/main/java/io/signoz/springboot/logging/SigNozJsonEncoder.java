@@ -1,19 +1,17 @@
 package io.signoz.springboot.logging;
 
 import ch.qos.logback.classic.spi.ILoggingEvent;
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
 import io.signoz.springboot.masking.MaskingRegistry;
 import net.logstash.logback.encoder.LogstashEncoder;
 
 import java.io.IOException;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
+import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 /**
  * Custom Logback encoder that wraps {@link LogstashEncoder} (Logstash-compatible JSON)
@@ -21,14 +19,23 @@ import java.util.Map;
  *
  * <p>The masking pipeline:
  * <ol>
- *   <li>The formatted message and every MDC value are masked <em>before</em> serialisation, while
- *       they are still raw text. This step is what catches JSON embedded in a message: once
- *       {@code LogstashEncoder} has serialised it, its quotes are escaped ({@code \"password\":\"x\"})
- *       and no {@code "field":"value"} pattern matches it any more.</li>
- *   <li>The parent {@code LogstashEncoder} serialises the masked event to a JSON byte array.</li>
- *   <li>The finished line is passed through {@link MaskingRegistry#maskJsonString(String)} as a
- *       second pass over everything else (structured arguments, markers, stack traces).</li>
+ *   <li>The parent {@code LogstashEncoder} serialises the event to a JSON line.</li>
+ *   <li>The line is re-read token by token and every value is masked on its own, unescaped:
+ *       <ul>
+ *         <li>a value under a sensitive key (the message's own fields, MDC keys, structured
+ *             arguments) goes through {@link MaskingRegistry#mask(String, String)};</li>
+ *         <li>any other string value goes through {@link MaskingRegistry#maskJsonString(String)},
+ *             so JSON, form bodies and free-text secrets inside the message, MDC values and stack
+ *             traces are masked as the raw text they are.</li>
+ *       </ul></li>
+ *   <li>The masked tokens are written back out as the final line.</li>
  * </ol>
+ *
+ * <p>Masking each value separately, rather than running the patterns over the serialised line, is
+ * what makes this correct. Over the line, JSON embedded in a message is escaped
+ * ({@code \"password\":\"x\"}) so no {@code "field":"value"} pattern matches it, and free-text
+ * patterns such as {@code password=(\S+)} run past the end of the string they matched in and
+ * swallow the rest of the line.
  *
  * <p>Masking fails closed: if any step throws, the message is withheld and a minimal record
  * (timestamp, level, logger, {@link #MASKING_FAILED_MESSAGE}) is written instead of the raw event.
@@ -47,6 +54,9 @@ public class SigNozJsonEncoder extends LogstashEncoder {
     public static final String MASKING_FAILED_MESSAGE = "[signoz:masking-failed:message-withheld]";
 
     private static final String LINE_SEPARATOR = System.lineSeparator();
+
+    /** Thread-safe once configured; shared by every encoder instance. */
+    private static final JsonFactory JSON_FACTORY = new JsonFactory();
 
     private MaskingRegistry maskingRegistry;
 
@@ -74,12 +84,12 @@ public class SigNozJsonEncoder extends LogstashEncoder {
         }
 
         try {
-            byte[] bytes = super.encode(maskedView(event, registry));
+            byte[] bytes = super.encode(event);
             if (bytes == null) {
                 return null;
             }
-            String json = new String(bytes, StandardCharsets.UTF_8);
-            return registry.maskJsonString(json).getBytes(StandardCharsets.UTF_8);
+            String line = new String(bytes, StandardCharsets.UTF_8);
+            return maskJsonLine(line, registry).getBytes(StandardCharsets.UTF_8);
         } catch (Exception e) {
             // Fail closed: a log line that may carry an unmasked secret is worse than a missing one,
             // so keep the fact that something was logged but not what.
@@ -96,82 +106,62 @@ public class SigNozJsonEncoder extends LogstashEncoder {
         }
     }
 
-    // --- Pre-serialisation masking ---
+    // --- Per-value masking ---
 
     /**
-     * Returns a view of {@code event} whose formatted message and MDC are masked.
-     *
-     * <p>A dynamic proxy rather than a concrete {@code ILoggingEvent} implementation: this class is
-     * compiled against Logback 1.2, and a concrete class would not implement the methods later
-     * versions add ({@code getInstant}, {@code getKeyValuePairs}, {@code getMarkerList}, ...) that
-     * LogstashEncoder calls on Logback 1.3+. The proxy forwards every method it does not override,
-     * whatever the runtime version declares.
+     * Masks every value of a serialised JSON line and returns the re-serialised line, keeping
+     * whatever trailing line separator the encoder appended.
      */
-    static ILoggingEvent maskedView(ILoggingEvent event, MaskingRegistry registry) {
-        return (ILoggingEvent) Proxy.newProxyInstance(
-                ILoggingEvent.class.getClassLoader(),
-                new Class<?>[]{ILoggingEvent.class},
-                new MaskingEventHandler(event, registry));
+    static String maskJsonLine(String line, MaskingRegistry registry) throws IOException {
+        int end = line.length();
+        while (end > 0 && Character.isWhitespace(line.charAt(end - 1))) {
+            end--;
+        }
+        String body = line.substring(0, end);
+        String trailer = line.substring(end);
+
+        StringWriter out = new StringWriter(line.length() + 16);
+        JsonParser parser = JSON_FACTORY.createParser(body);
+        JsonGenerator generator = JSON_FACTORY.createGenerator(out);
+        try {
+            JsonToken token;
+            while ((token = parser.nextToken()) != null) {
+                // For a value inside an array this is the array's own field name, so a list under a
+                // sensitive key is masked element by element.
+                String field = parser.currentName();
+                switch (token) {
+                    case VALUE_STRING:
+                        generator.writeString(maskValue(registry, field, parser.getText()));
+                        break;
+                    case VALUE_NUMBER_INT:
+                    case VALUE_NUMBER_FLOAT:
+                        if (registry.isSensitiveField(field)) {
+                            // A card number or CVV logged as a number is still sensitive.
+                            generator.writeString(registry.mask(field, parser.getText()));
+                        } else {
+                            // Written from the original text so no precision is lost on the way through.
+                            generator.writeNumber(parser.getText());
+                        }
+                        break;
+                    default:
+                        generator.copyCurrentEvent(parser);
+                        break;
+                }
+            }
+        } finally {
+            parser.close();
+            generator.close();
+        }
+        return out.toString() + trailer;
     }
 
-    private static final class MaskingEventHandler implements InvocationHandler {
-
-        private final ILoggingEvent delegate;
-        private final MaskingRegistry registry;
-        private String maskedMessage;
-        private Map<String, String> maskedMdc;
-
-        MaskingEventHandler(ILoggingEvent delegate, MaskingRegistry registry) {
-            this.delegate = delegate;
-            this.registry = registry;
+    private static String maskValue(MaskingRegistry registry, String field, String value) {
+        if (registry.isSensitiveField(field)) {
+            return registry.mask(field, value);
         }
-
-        @Override
-        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-            if (method.getParameterTypes().length == 0) {
-                String name = method.getName();
-                if ("getFormattedMessage".equals(name)) {
-                    return formattedMessage();
-                }
-                if ("getMDCPropertyMap".equals(name) || "getMdc".equals(name)) {
-                    return mdc();
-                }
-            }
-            try {
-                return method.invoke(delegate, args);
-            } catch (InvocationTargetException e) {
-                throw e.getCause();
-            }
-        }
-
-        private String formattedMessage() {
-            if (maskedMessage == null) {
-                // maskJsonString is a superset of maskMessage: it applies the message patterns, then
-                // "field":"value" and field=value pairs, so JSON and form bodies in a message are covered.
-                maskedMessage = registry.maskJsonString(delegate.getFormattedMessage());
-            }
-            return maskedMessage;
-        }
-
-        private Map<String, String> mdc() {
-            if (maskedMdc == null) {
-                Map<String, String> raw = delegate.getMDCPropertyMap();
-                if (raw == null || raw.isEmpty()) {
-                    maskedMdc = raw == null ? Collections.<String, String>emptyMap() : raw;
-                } else {
-                    Map<String, String> masked = new LinkedHashMap<String, String>(raw.size() * 2);
-                    for (Map.Entry<String, String> entry : raw.entrySet()) {
-                        String key = entry.getKey();
-                        String value = entry.getValue();
-                        masked.put(key, registry.isSensitiveField(key)
-                                ? registry.mask(key, value)
-                                : registry.maskJsonString(value));
-                    }
-                    maskedMdc = Collections.unmodifiableMap(masked);
-                }
-            }
-            return maskedMdc;
-        }
+        // maskJsonString is a superset of maskMessage: it applies the message patterns, then
+        // "field":"value" and field=value pairs, so JSON and form bodies in a value are covered.
+        return registry.maskJsonString(value);
     }
 
     // --- Fail-closed fallback ---

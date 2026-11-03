@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.signoz.springboot.masking.MaskingRegistry;
 import io.signoz.springboot.properties.SigNozLoggingProperties;
+import net.logstash.logback.argument.StructuredArguments;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -87,6 +88,59 @@ class SigNozJsonEncoderEscapedJsonMaskingTest {
 
         assertThat(line).doesNotContain("supersecret");
         assertThat(JSON.readTree(line).get("message").asText()).contains("done");
+    }
+
+    /**
+     * The free-text {@code password\s*[=:\s]+\s*(\S+)} pattern used to run over the serialised line,
+     * where nothing separates fields by whitespace: it ran past the end of the message and swallowed
+     * every field after it, leaving an unterminated line.
+     */
+    @Test
+    void secretAtEndOfMessageDoesNotTruncateTheLine() throws Exception {
+        start(new MaskingRegistry(new SigNozLoggingProperties()));
+
+        Map<String, String> mdc = new HashMap<String, String>();
+        mdc.put("traceId", "4bf92f3577b34da6a3ce929d0e0e4736");
+
+        String line = encode(event("login password=" + CANARY, null, mdc));
+
+        assertThat(line).doesNotContain(CANARY).endsWith(System.lineSeparator());
+        JsonNode node = JSON.readTree(line);
+        assertThat(node.get("message").asText()).isEqualTo("login password=***");
+        assertThat(node.get("logger_name").asText()).isEqualTo("probe");
+        assertThat(node.get("level").asText()).isEqualTo("INFO");
+        assertThat(node.get("traceId").asText()).isEqualTo("4bf92f3577b34da6a3ce929d0e0e4736");
+    }
+
+    @Test
+    void secretInExceptionMessageIsMaskedInStackTrace() throws Exception {
+        start(new MaskingRegistry(new SigNozLoggingProperties()));
+
+        LoggingEvent event = new LoggingEvent("x", loggerContext.getLogger("probe"), Level.ERROR,
+                "login failed", new IllegalStateException("rejected password=" + CANARY), null);
+
+        String line = encode(event);
+
+        assertThat(line).doesNotContain(CANARY);
+        JsonNode node = JSON.readTree(line);
+        assertThat(node.get("stack_trace").asText())
+                .contains("IllegalStateException: rejected password=***")
+                .contains("secretInExceptionMessageIsMaskedInStackTrace");
+        assertThat(node.get("level").asText()).isEqualTo("ERROR");
+    }
+
+    @Test
+    void numericValueUnderSensitiveKeyIsMasked() throws Exception {
+        start(new MaskingRegistry(new SigNozLoggingProperties()));
+
+        String line = encode(event("payment {} {}",
+                new Object[]{StructuredArguments.kv("cvv", 737), StructuredArguments.kv("amount", 12.50)}, null));
+
+        assertThat(line).doesNotContain("737");
+        JsonNode node = JSON.readTree(line);
+        assertThat(node.get("cvv").asText()).isEqualTo("***");
+        assertThat(node.get("amount").isNumber()).isTrue();
+        assertThat(node.get("amount").asDouble()).isEqualTo(12.50);
     }
 
     @Test
