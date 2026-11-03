@@ -54,7 +54,7 @@ Pick the artifact that matches your Spring Boot version:
 <dependency>
     <groupId>io.github.rylxes</groupId>
     <artifactId>signoz-spring-boot2-starter</artifactId>
-    <version>1.0.6</version>
+    <version>1.0.11</version>
 </dependency>
 ```
 
@@ -63,7 +63,7 @@ Pick the artifact that matches your Spring Boot version:
 <dependency>
     <groupId>io.github.rylxes</groupId>
     <artifactId>signoz-spring-boot3-starter</artifactId>
-    <version>1.0.6</version>
+    <version>1.0.11</version>
 </dependency>
 ```
 
@@ -101,7 +101,7 @@ Logback encoder from the SigNoz starter, then add your own backend:
 <dependency>
     <groupId>io.github.rylxes</groupId>
     <artifactId>signoz-spring-boot3-starter</artifactId>
-    <version>1.0.6</version>
+    <version>1.0.11</version>
     <exclusions>
         <exclusion>
             <groupId>org.springframework.boot</groupId>
