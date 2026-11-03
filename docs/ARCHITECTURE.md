@@ -52,7 +52,9 @@ two separate modules rather than sharing a single compiled artifact.
   - **Masking** (`MaskingRegistry`, `MaskingStrategy` hierarchy, `MaskedArgumentAspect`)
   - **Tracing** (`OpenTelemetrySdkConfig`, `SigNozTracer`, `TracedAspect`)
   - **Audit** (`AuditLogAspect`, `SigNozAuditHandler`, `AuditEvent`)
-  - **Logging** (`OtlpLogbackAppender`, `SigNozJsonEncoder`)
+  - **Logging** (`OtlpLogbackAppender`, `SigNozJsonEncoder`; shared `OtlpLogSupport`; and in
+    `logging.log4j2`: `SigNozLog4j2JsonLayout`, `OtlpLog4j2Appender`, `SamplingLog4j2Filter`,
+    `SigNozLog4j2Configurer`, compiled against Log4j2 2.17.2)
   - **Metrics** (`SigNozMetricsConfig`)
 - Spring Boot classes are `optional` dependencies — the module can be used without Boot if needed
 
@@ -81,6 +83,8 @@ SigNozAutoConfiguration                 ← entry point (@AutoConfiguration / @C
   │
   └── @Import (in order)
       ├── SigNozLoggingAutoConfiguration   ← MaskingRegistry, SigNozJsonEncoder, logback configurer
+      ├── SigNozLog4j2AutoConfiguration    ← SigNozLog4j2Configurer
+      │   (only when the Log4j2 API is bound to log4j-core, i.e. Log4j2 is the backend)
       ├── SigNozTracingAutoConfiguration   ← OpenTelemetrySdkConfig, SigNozTracer, TracedAspect
       ├── SigNozWebAutoConfiguration       ← TraceIdMdcFilter, HttpLoggingFilter, MaskedArgumentAspect
       │   (only when @ConditionalOnWebApplication(SERVLET))
