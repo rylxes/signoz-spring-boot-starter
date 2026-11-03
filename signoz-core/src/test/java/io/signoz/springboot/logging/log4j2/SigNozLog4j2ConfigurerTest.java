@@ -48,7 +48,11 @@ class SigNozLog4j2ConfigurerTest {
     void setUp() {
         // ConsoleAppender binds System.out when it is built, so swap it in first.
         originalOut = System.out;
-        System.setOut(new PrintStream(stdout, true));
+        try {
+            System.setOut(new PrintStream(stdout, true, StandardCharsets.UTF_8.name()));
+        } catch (java.io.UnsupportedEncodingException e) {
+            throw new IllegalStateException(e);
+        }
 
         ConfigurationBuilder<BuiltConfiguration> b = ConfigurationBuilderFactory.newConfigurationBuilder();
         b.setStatusLevel(Level.ERROR);

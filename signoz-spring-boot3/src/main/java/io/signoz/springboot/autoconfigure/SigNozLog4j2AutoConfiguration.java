@@ -38,7 +38,7 @@ public class SigNozLog4j2AutoConfiguration {
             try {
                 SigNozLog4j2Configurer.configure((LoggerContext) context, props, maskingRegistry);
             } catch (Exception e) {
-                log.warn("[SigNoz] Could not configure Log4j2 programmatically: {}", e.getMessage());
+                log.warn("[SigNoz] Could not configure Log4j2 programmatically", e);
             }
         };
     }

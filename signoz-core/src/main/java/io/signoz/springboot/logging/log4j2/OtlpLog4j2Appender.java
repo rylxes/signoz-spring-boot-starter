@@ -106,11 +106,17 @@ public class OtlpLog4j2Appender extends AbstractAppender {
         }
     }
 
+    /**
+     * Flushes and shuts down the exporter within the caller's {@code timeout}. Log4j2's no-arg
+     * {@code stop()} passes {@code 0}; then the configured export timeout applies, so buffered
+     * records are still flushed at shutdown rather than dropped.
+     */
     @Override
     public boolean stop(long timeout, TimeUnit timeUnit) {
         if (loggerProvider != null) {
             try {
-                loggerProvider.shutdown().join(exportTimeoutMs, TimeUnit.MILLISECONDS);
+                long waitMs = timeout > 0 ? timeUnit.toMillis(timeout) : exportTimeoutMs;
+                loggerProvider.shutdown().join(waitMs, TimeUnit.MILLISECONDS);
             } catch (Exception e) {
                 LOGGER.warn("[SigNoz] Error shutting down OTLP log appender", e);
             }
