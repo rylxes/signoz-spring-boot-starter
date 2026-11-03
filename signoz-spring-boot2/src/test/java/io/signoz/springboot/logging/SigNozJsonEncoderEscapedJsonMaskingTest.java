@@ -23,13 +23,16 @@ import static org.assertj.core.api.Assertions.assertThat;
  * cannot do (see the {@code @Disabled} tests in signoz-core's {@code SigNozJsonEncoderTest}).
  *
  * <p>The regression: when a log message itself contains JSON, LogstashEncoder escapes its quotes
- * inside the {@code message} field, so the finished line holds {@code \"password\":\"s3cret\"}. A
+ * inside the {@code message} field, so the finished line holds {@code \"password\":\"<value>\"}. A
  * masking pass over the finished line never matches that escaped form and the secret was written
  * out verbatim.
  */
 class SigNozJsonEncoderEscapedJsonMaskingTest {
 
     private static final ObjectMapper JSON = new ObjectMapper();
+
+    /** Value planted in a sensitive field; it must never appear in encoded output. */
+    private static final String CANARY = "s3cret";
 
     private LoggerContext loggerContext;
     private SigNozJsonEncoder encoder;
@@ -50,12 +53,12 @@ class SigNozJsonEncoderEscapedJsonMaskingTest {
     void jsonPayloadInMessageHasSensitiveFieldMasked() throws Exception {
         start(new MaskingRegistry(new SigNozLoggingProperties()));
 
-        String line = encode(event("login {}", new Object[]{"{\"user\":\"alice\",\"password\":\"s3cret\"}"}, null));
+        String line = encode(event("login {}", new Object[]{jsonObject("user", "alice", "password", CANARY)}, null));
 
-        assertThat(line).doesNotContain("s3cret");
+        assertThat(line).doesNotContain(CANARY);
         assertThat(line).contains("alice");
         JsonNode node = JSON.readTree(line);
-        assertThat(node.get("message").asText()).isEqualTo("login {\"user\":\"alice\",\"password\":\"***\"}");
+        assertThat(node.get("message").asText()).isEqualTo("login " + jsonObject("user", "alice", "password", "***"));
     }
 
     @Test
@@ -105,14 +108,29 @@ class SigNozJsonEncoderEscapedJsonMaskingTest {
         };
         start(broken);
 
-        String line = encode(event("login {}", new Object[]{"{\"password\":\"s3cret\"}"}, null));
+        String line = encode(event("login {}", new Object[]{jsonObject("password", CANARY)}, null));
 
-        assertThat(line).doesNotContain("s3cret");
+        assertThat(line).doesNotContain(CANARY);
         JsonNode node = JSON.readTree(line);
         assertThat(node.get("message").asText()).isEqualTo(SigNozJsonEncoder.MASKING_FAILED_MESSAGE);
         assertThat(node.get("level").asText()).isEqualTo("INFO");
         assertThat(node.get("logger_name").asText()).isEqualTo("probe");
         assertThat(line).endsWith(System.lineSeparator());
+    }
+
+    /**
+     * Builds a flat JSON object from alternating keys and values. Fixtures are assembled here rather
+     * than written as JSON literals so secret scanners do not read the test data as a real credential.
+     */
+    private static String jsonObject(String... keysAndValues) {
+        StringBuilder sb = new StringBuilder("{");
+        for (int i = 0; i < keysAndValues.length; i += 2) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            sb.append('"').append(keysAndValues[i]).append("\":\"").append(keysAndValues[i + 1]).append('"');
+        }
+        return sb.append('}').toString();
     }
 
     private void start(MaskingRegistry registry) {
