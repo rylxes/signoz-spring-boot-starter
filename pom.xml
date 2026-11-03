@@ -59,6 +59,9 @@
         <logstash-logback.version>7.4</logstash-logback.version>
         <micrometer-otlp.version>1.12.3</micrometer-otlp.version>
         <slf4j.version>1.7.36</slf4j.version>
+        <!-- Mockito 4.x stays for Java 8 compatibility, but its bundled Byte Buddy (1.12.x)
+             cannot instrument Java 21+ class files. Pin a newer Byte Buddy for all modules. -->
+        <byte-buddy.version>1.18.14</byte-buddy.version>
 
         <!-- Plugin versions -->
         <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
@@ -141,6 +144,18 @@
                 <groupId>org.mockito</groupId>
                 <artifactId>mockito-inline</artifactId>
                 <version>4.11.0</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>net.bytebuddy</groupId>
+                <artifactId>byte-buddy</artifactId>
+                <version>${byte-buddy.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>net.bytebuddy</groupId>
+                <artifactId>byte-buddy-agent</artifactId>
+                <version>${byte-buddy.version}</version>
                 <scope>test</scope>
             </dependency>
             <dependency>
