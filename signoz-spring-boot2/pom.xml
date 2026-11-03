@@ -93,6 +93,12 @@
         </dependency>
         <!-- spring-boot-starter-web is already in main scope as optional=true,
              which puts it on the compile AND test classpath; no extra test entry needed. -->
+        <!-- ReactiveSecurityContextHolder for the reactive user-context tests -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-core</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- OTel SDK: used to supply OpenTelemetry.noop() in integration tests -->
         <dependency>
             <groupId>io.opentelemetry</groupId>

@@ -1,7 +1,10 @@
 package io.signoz.springboot.outbound;
 
+import io.opentelemetry.api.trace.Span;
 import io.signoz.springboot.properties.SigNozOutboundProperties;
 import io.signoz.springboot.tracing.TraceContextCodec;
+import io.signoz.springboot.tracing.TraceIdentity;
+import io.signoz.springboot.webflux.ReactiveMdc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -10,6 +13,8 @@ import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 import org.springframework.web.reactive.function.client.ExchangeFunction;
 import reactor.core.publisher.Mono;
+
+import java.util.Map;
 
 /**
  * A reactive {@link ExchangeFilterFunction} that injects W3C {@code traceparent} headers
@@ -40,14 +45,18 @@ public class TracingWebClientFilter implements ExchangeFilterFunction {
             ClientRequest.Builder requestBuilder = ClientRequest.from(request);
 
             if (properties.isPropagateHeaders()) {
-                String traceparent = buildTraceparent();
+                Map<String, String> reactiveMdc = ReactiveMdc.fromContext(contextView);
+                String traceparent = buildTraceparent(reactiveMdc);
                 if (traceparent != null) {
                     requestBuilder.header("traceparent", traceparent);
                 }
-                // Also forward X-Request-ID from MDC when available. Note: in pure
-                // reactive chains MDC is usually empty due to thread-switching, so
-                // this is best-effort. Blocking/servlet callers still benefit.
-                String requestId = MDC.get("requestId");
+                // Also forward X-Request-ID. The Reactor context (populated by
+                // TraceIdWebFilter) is reliable across thread hops; the thread MDC
+                // covers servlet and other blocking callers.
+                String requestId = reactiveMdc.get(TraceIdentity.MDC_REQUEST_ID);
+                if (requestId == null || requestId.isEmpty()) {
+                    requestId = MDC.get(TraceIdentity.MDC_REQUEST_ID);
+                }
                 if (requestId != null && !requestId.isEmpty()) {
                     requestBuilder.header("X-Request-ID", requestId);
                 }
@@ -81,16 +90,24 @@ public class TracingWebClientFilter implements ExchangeFilterFunction {
     }
 
     /**
-     * Build a W3C {@code traceparent} for the outbound request. Prefers the active
-     * OTEL {@code SpanContext} when available; otherwise falls back to MDC values
-     * populated by {@code TraceIdMdcFilter} so agentless deployments still
-     * propagate trace context (best-effort — MDC may be empty in reactive chains
-     * that don't copy thread-locals into Reactor context).
+     * Build a W3C {@code traceparent} for the outbound request, preferring in order:
+     * the active OTel span; the request's entries in the Reactor context (set by
+     * {@code TraceIdWebFilter}, so correct even after thread hops); the thread MDC.
      *
      * @return the formatted {@code traceparent} header value, or {@code null} when
      *         no identity is available to propagate
      */
-    private static String buildTraceparent() {
-        return TraceContextCodec.currentTraceparent();
+    private static String buildTraceparent(Map<String, String> reactiveMdc) {
+        if (Span.current().getSpanContext().isValid()) {
+            return TraceContextCodec.currentTraceparent();
+        }
+        String traceId = reactiveMdc.get(TraceContextCodec.MDC_TRACE_ID);
+        String spanId = reactiveMdc.get(TraceContextCodec.MDC_SPAN_ID);
+        if (traceId != null && !traceId.isEmpty() && spanId != null && !spanId.isEmpty()) {
+            String flags = reactiveMdc.get(TraceContextCodec.MDC_TRACE_FLAGS);
+            return TraceContextCodec.format(traceId, spanId,
+                    flags == null || flags.isEmpty() ? "01" : flags);
+        }
+        return TraceContextCodec.mdcTraceparent();
     }
 }
