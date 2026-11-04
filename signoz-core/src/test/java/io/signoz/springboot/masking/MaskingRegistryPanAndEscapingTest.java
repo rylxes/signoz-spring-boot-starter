@@ -259,6 +259,16 @@ class MaskingRegistryPanAndEscapingTest {
     }
 
     @Test
+    @DisplayName("Cookie headers are masked by default: they carry session IDs")
+    void masksCookieHeadersByDefault() {
+        MaskingRegistry registry = new MaskingRegistry(new SigNozLoggingProperties());
+
+        assertThat(registry.mask("cookie", "SESSION=" + CANARY)).doesNotContain(CANARY);
+        assertThat(registry.mask("Set-Cookie", "SESSION=" + CANARY + "; Path=/; HttpOnly"))
+                .doesNotContain(CANARY);
+    }
+
+    @Test
     @DisplayName("code is not masked by default: it is too generic and would hide error codes")
     void leavesCodeVisibleByDefault() {
         MaskingRegistry registry = new MaskingRegistry(new SigNozLoggingProperties());

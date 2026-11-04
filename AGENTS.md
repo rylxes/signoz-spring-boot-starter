@@ -38,9 +38,11 @@ separate `log4j2-backend` surefire execution. Run the full build before you comm
 2. **No version-sensitive Spring calls in `signoz-core`.** It compiles against Spring 5.3, so a call
    to a method removed or retyped later compiles but throws `NoSuchMethodError` on Spring 6/7.
    Known cases: `ClientResponse.rawStatusCode()` (gone in 6.1), `ClientHttpResponse.getRawStatusCode()`
-   (gone in 7.0), `statusCode()` / `getStatusCode()` (return type changed in 6.0). Use reflection
-   resolved once with a fallback; see `io.signoz.springboot.outbound.ResponseStatusReader`. Verify
-   with `javap` against the newer Spring jar if unsure.
+   and `ServerHttpResponse.getRawStatusCode()` (gone in 7.0), `statusCode()` / `getStatusCode()`
+   (return type changed in 6.0), and `HttpHeaders` map methods such as `entrySet()` and
+   `get(Object)` (gone in 7.0, where it is no longer a map; use `getFirst(String)` or
+   `toSingleValueMap()`). Read statuses through `io.signoz.springboot.compat.ResponseStatusReader`.
+   Verify with `javap` against the newer Spring jar if unsure.
 3. **Java 8 source level** everywhere except `signoz-spring-boot3`: no `var`, `List.of`, records,
    switch expressions, text blocks.
 4. **Optional dependencies stay optional.** Guard with `@ConditionalOnClass(name = "fully.qualified.Name")`

@@ -1,6 +1,7 @@
 package io.signoz.springboot.outbound;
 
 import io.opentelemetry.api.trace.Span;
+import io.signoz.springboot.compat.ResponseStatusReader;
 import io.signoz.springboot.masking.MaskingRegistry;
 import io.signoz.springboot.properties.SigNozOutboundProperties;
 import io.signoz.springboot.tracing.TraceContextCodec;

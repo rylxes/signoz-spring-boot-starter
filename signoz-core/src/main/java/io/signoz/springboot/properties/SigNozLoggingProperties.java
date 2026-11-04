@@ -48,13 +48,17 @@ public class SigNozLoggingProperties {
     /**
      * List of field names whose values should be fully masked in log output.
      * Matching is case-insensitive and ignores {@code _}, {@code -} and {@code .}, so
-     * {@code access_token} also covers {@code accessToken} and {@code access-token}. Built-in defaults are merged with this list.
+     * {@code access_token} also covers {@code accessToken} and {@code access-token}. Setting this
+     * property replaces the defaults below, so a configured list must repeat the ones it keeps;
+     * use {@code field-strategies} to add fields without replacing them.
      */
     private List<String> maskedFields = new ArrayList<>(Arrays.asList(
             "password", "passwd", "secret", "token", "apikey", "api_key",
             "creditcard", "cardnumber", "card_number", "cvv",
             "ssn", "authorization", "x-api-key", "x-auth-token",
-            "access_token", "refresh_token", "id_token", "client_secret"
+            "access_token", "refresh_token", "id_token", "client_secret",
+            // Session cookies are bearer credentials, logged when signoz.web.log-headers is on.
+            "cookie", "set-cookie"
     ));
 
     /**

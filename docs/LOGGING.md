@@ -139,7 +139,7 @@ entries. It never changes the values your code sees. Switch it off entirely with
 **Masked by default.** These field names are replaced with `***`:
 `password`, `passwd`, `secret`, `token`, `apikey`, `api_key`, `creditcard`, `cardnumber`,
 `card_number`, `cvv`, `ssn`, `authorization`, `x-api-key`, `x-auth-token`, `access_token`,
-`refresh_token`, `id_token`, `client_secret`. Free-text patterns also catch `password=…`,
+`refresh_token`, `id_token`, `client_secret`, `cookie`, `set-cookie`. Free-text patterns also catch `password=…`,
 `Bearer …` tokens, 16-digit card numbers and US SSNs in messages.
 
 **How names match.** Names are compared ignoring case, `_`, `-` and `.`, so `access_token` also

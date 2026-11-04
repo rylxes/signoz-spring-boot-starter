@@ -90,6 +90,17 @@
   It is still present (deprecated for removal) in Spring 6.2. Both outbound clients
   now read the status in a way that works on Spring 5, 6 and 7, and logging the
   status can no longer fail the call.
+- **WebFlux access log and WebSocket handshake on Spring Framework 7 (Spring Boot 4):**
+  `HttpLoggingWebFilter` read `ServerHttpResponse.getRawStatusCode()` and, with
+  `signoz.web.log-headers` on, iterated `HttpHeaders` as a map; the WebSocket handshake
+  interceptor called `HttpHeaders.get(Object)`. Spring 7.0 removed all three, so each
+  logged WebFlux request, and each WebSocket handshake, would fail with
+  `NoSuchMethodError`. They now use calls that exist on Spring 5, 6 and 7. Every Spring
+  API that `signoz-core` calls was checked against the Spring 7.0 jars.
+- **Security:** `Cookie` and `Set-Cookie` headers were logged in clear when
+  `signoz.web.log-headers` was on, in both the servlet and WebFlux access logs. `cookie`
+  and `set-cookie` are now in the default `masked-fields`. If you set `masked-fields`
+  yourself, add them to your list.
 - **Security:** field names matched only as listed, apart from case. `access_token` in
   `masked-fields` left `accessToken` and `access-token` in clear, and names no list
   anticipates, such as `auth_token`, `clientSecret` or `X-Amz-Signature`, were never masked.

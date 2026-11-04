@@ -142,6 +142,35 @@ class HttpLoggingWebFilterTest {
         assertThat(appender.list).isEmpty();
     }
 
+    @Test
+    void masksTheCookieHeaderByDefault() {
+        webProps.setLogHeaders(true);
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/orders")
+                .header("Cookie", "SESSION=" + CANARY)
+                .header("X-Tenant", "acme"));
+
+        filter.filter(exchange, ex -> ex.getResponse().setComplete()).block();
+
+        assertThat(appender.list).hasSize(1);
+        assertThat(appender.list.get(0).getFormattedMessage())
+                .contains("headers=").contains("acme").doesNotContain(CANARY);
+    }
+
+    @Test
+    void logsANonStandardStatus() {
+        // A status with no HttpStatus constant: Spring 5's typed getStatusCode() cannot represent
+        // it, so the raw status must be read where it exists.
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/orders"));
+
+        filter.filter(exchange, ex -> {
+            ex.getResponse().setRawStatusCode(499);
+            return ex.getResponse().setComplete();
+        }).block();
+
+        assertThat(appender.list).hasSize(1);
+        assertThat(appender.list.get(0).getFormattedMessage()).startsWith("HTTP GET /orders status=499 ");
+    }
+
     private static Mono<Void> write(ServerWebExchange exchange, String body) {
         DataBuffer buffer = exchange.getResponse().bufferFactory()
                 .wrap(body.getBytes(StandardCharsets.UTF_8));
