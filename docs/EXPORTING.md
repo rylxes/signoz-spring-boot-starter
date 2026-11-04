@@ -16,8 +16,8 @@ the [configuration reference](CONFIGURATION.md#exporter-properties-signozexporte
 
 ## Self-hosted SigNoz (default)
 
-Out of the box the starter exports logs, traces and metrics over OTLP gRPC to
-`http://localhost:4317`, the port a SigNoz collector listens on. Point it at yours:
+Out of the box the starter exports logs and traces (and metrics, once
+[set up](METRICS.md#jvm-and-http-metrics)) over OTLP gRPC to `http://localhost:4317`, the port a SigNoz collector listens on. Point it at yours:
 
 ```yaml
 signoz:
@@ -48,7 +48,8 @@ signoz:
 ```
 
 Find the key in **SigNoz Cloud > Settings > Ingestion**. `signoz.headers` accepts any headers; each
-one is added to every OTLP export request (logs, traces and metrics).
+one is added to every OTLP export request: logs, traces and, when
+[metrics export](METRICS.md#jvm-and-http-metrics) is set up, metrics.
 
 ---
 
@@ -66,7 +67,7 @@ protocol instrumentation to the agent** and keeps its application-level features
 | `@Traced` spans | Uses the agent's tracer | Uses the starter's tracer |
 | OTLP log export | Skipped (agent exports) | Active |
 | OTLP trace export | Skipped (agent exports) | Active |
-| OTLP metrics export | Skipped (agent exports) | Active |
+| OTLP metrics export | Skipped (agent exports) | Active, once `micrometer-registry-otlp` is added ([Metrics](METRICS.md#jvm-and-http-metrics)) |
 | Trace IDs in the MDC (`trace_id`, `span_id`, `trace_flags`) | From the agent's active span | From inbound `traceparent` / `X-Request-ID`, else new IDs |
 | Propagation over HTTP | Agent propagates W3C `traceparent` | Starter's RestTemplate / WebClient interceptors |
 | Propagation over Kafka, SQS, gRPC, WebSocket / STOMP | Agent propagates | Starter's interceptors (see [Tracing](TRACING.md)) |

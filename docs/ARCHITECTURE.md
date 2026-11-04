@@ -65,11 +65,13 @@ two separate modules rather than sharing a single compiled artifact.
 - `SigNozReactiveWebAutoConfiguration`, which registers the reactive filters from
   `signoz-core`'s `io.signoz.springboot.webflux` package (one shared copy: the
   WebFlux API has no `javax`/`jakarta` split). The core classes are compiled
-  against Spring 5.3 / Reactor 3.4, so they may only call APIs that also exist on
-  newer Spring versions; methods that were removed or retyped (such as the HTTP
-  client response status methods) are resolved reflectively through
-  `ResponseStatusReader`. Both modules' integration tests run the core classes
-  against their own Spring version.
+  against Spring 5.3 / Reactor 3.4, so they must only call APIs that also exist on
+  newer Spring versions. Methods that were removed or retyped must be resolved
+  reflectively; `ResponseStatusReader` does this for the HTTP client response
+  status. One known gap remains: `HttpLoggingWebFilter` calls
+  `ServerHttpResponse.getRawStatusCode()`, which exists through Spring 6.2 but was
+  removed in 7.0. Both modules' integration tests run the core classes against
+  their own Spring version.
 - Spring Boot 3 only: `SigNozMdcThreadLocalAccessor`, which lets Reactor's
   automatic context propagation restore the SigNoz MDC on every thread hop
 - All auto-configuration entry points

@@ -13,14 +13,23 @@ Properties are under `signoz.web.*` and `signoz.user-context.*` in the
 ## HTTP access logging
 
 Every inbound request produces one log line on the `SIGNOZ_HTTP` logger with the method, path,
-query string, status and duration. Request and response headers and bodies can be included; all
-of them are masked (see [Masking](LOGGING.md#masking-sensitive-values)), and bodies are cut off at
-`signoz.web.max-body-bytes` (default 4096).
+query string, status and duration. Request and response headers and bodies can be included. They
+go through the same masking as everything else (see [Masking](LOGGING.md#masking-sensitive-values)),
+and bodies are cut off at `signoz.web.max-body-bytes` (default 4096).
 
 Headers are logged only with `signoz.web.log-headers: true`, and are masked by name with the same
 rules as other fields: `Authorization`, `X-API-Key`, `X-Auth-Token` and any name ending in `token`,
-`secret`, `signature` and so on. **`Cookie` and `Set-Cookie` are not masked by default**; if you log
-headers, add `cookie` and `set-cookie` to `signoz.logging.masked-fields`.
+`secret`, `signature` and so on. **`Cookie` and `Set-Cookie` are not masked by default.** If you log
+headers, mask them with `field-strategies`, which adds to the default rules (setting
+`masked-fields` would replace the default list):
+
+```yaml
+signoz:
+  logging:
+    field-strategies:
+      cookie: full
+      set-cookie: full
+```
 
 **Exclude paths** (defaults: `/actuator/**`, `/health`, `/health/**`, `/favicon.ico`). Setting the
 list replaces the defaults:

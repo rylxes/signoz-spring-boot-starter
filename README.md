@@ -104,7 +104,7 @@ of configuration, covered in [Exporting telemetry](docs/EXPORTING.md):
 |---|---|
 | Self-hosted SigNoz | `signoz.endpoint` |
 | [SigNoz Cloud](docs/EXPORTING.md#signoz-cloud) | `signoz.endpoint` + `signoz.headers.signoz-ingestion-key` |
-| [OpenTelemetry Java agent](docs/EXPORTING.md#with-the-opentelemetry-java-agent) | Nothing: the agent exports, the starter keeps its log, masking and audit features |
+| [OpenTelemetry Java agent](docs/EXPORTING.md#with-the-opentelemetry-java-agent) | Nothing: the agent exports and propagates; JSON logs, masking, HTTP logging, annotations and audit still come from the starter |
 | [Grafana Cloud](docs/EXPORTING.md#grafana-cloud) | `signoz.exporter.backend: grafana-cloud` + Basic auth |
 | [Self-hosted Loki / Tempo / Mimir](docs/EXPORTING.md#self-hosted-grafana-stack) | Per-signal endpoints under `signoz.exporter.*` |
 | [Different backend per environment](docs/EXPORTING.md#different-backends-per-environment) | One Spring profile per backend |
