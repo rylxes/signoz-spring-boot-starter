@@ -66,15 +66,15 @@ class SigNozJsonEncoderEscapedJsonMaskingTest {
         start(new MaskingRegistry(new SigNozLoggingProperties()));
 
         Map<String, String> mdc = new HashMap<String, String>();
-        mdc.put("requestBody", "{\"user\":\"alice\",\"token\":\"tok-abcdef\"}");
-        mdc.put("password", "hunter2");
+        mdc.put("requestBody", jsonObject("user", "alice", "token", CANARY));
+        mdc.put("password", CANARY);
         mdc.put("traceId", "4bf92f3577b34da6a3ce929d0e0e4736");
 
         String line = encode(event("request received", null, mdc));
 
-        assertThat(line).doesNotContain("tok-abcdef").doesNotContain("hunter2");
+        assertThat(line).doesNotContain(CANARY);
         JsonNode node = JSON.readTree(line);
-        assertThat(node.get("requestBody").asText()).isEqualTo("{\"user\":\"alice\",\"token\":\"***\"}");
+        assertThat(node.get("requestBody").asText()).isEqualTo(jsonObject("user", "alice", "token", "***"));
         assertThat(node.get("password").asText()).isEqualTo("***");
         assertThat(node.get("traceId").asText()).isEqualTo("4bf92f3577b34da6a3ce929d0e0e4736");
     }
@@ -83,9 +83,9 @@ class SigNozJsonEncoderEscapedJsonMaskingTest {
     void plainKeyValueMessageIsStillMasked() throws Exception {
         start(new MaskingRegistry(new SigNozLoggingProperties()));
 
-        String line = encode(event("login with password=supersecret done", null, null));
+        String line = encode(event("login with password=" + CANARY + " done", null, null));
 
-        assertThat(line).doesNotContain("supersecret");
+        assertThat(line).doesNotContain(CANARY);
         assertThat(JSON.readTree(line).get("message").asText()).contains("done");
     }
 
