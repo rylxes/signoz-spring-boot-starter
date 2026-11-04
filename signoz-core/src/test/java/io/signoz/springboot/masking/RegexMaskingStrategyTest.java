@@ -5,6 +5,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class RegexMaskingStrategyTest {
 
+    /** Value planted in a sensitive position; it must never appear in masked output. */
+    private static final String CANARY = "s3cret";
+
     @Test
     void fullMatchReplacesEntireMatchWithStars() {
         RegexMaskingStrategy strategy = RegexMaskingStrategy.fullMatch("[0-9]+");
@@ -16,7 +19,7 @@ class RegexMaskingStrategyTest {
         // Group 1 = "bearer ", group 2 = token -- replacement keeps "bearer " prefix
         RegexMaskingStrategy strategy = new RegexMaskingStrategy(
                 "(?i)(bearer\\s+)\\S+", "$1***");
-        assertThat(strategy.mask("auth", "bearer eyJtoken123")).isEqualTo("bearer ***");
+        assertThat(strategy.mask("auth", "bearer " + CANARY)).isEqualTo("bearer ***");
     }
 
     @Test

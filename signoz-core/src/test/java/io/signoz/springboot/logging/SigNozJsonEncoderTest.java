@@ -19,6 +19,9 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 
 class SigNozJsonEncoderTest {
 
+    /** Value planted in a sensitive position; it must never appear in masked output. */
+    private static final String CANARY = "s3cret";
+
     private SigNozJsonEncoder encoder;
     private LoggerContext loggerContext;
 
@@ -49,9 +52,9 @@ class SigNozJsonEncoderTest {
         encoder.setMaskingRegistry(registry);
         encoder.start();
 
-        byte[] bytes = encoder.encode(fakeEvent("login with password=supersecret done"));
+        byte[] bytes = encoder.encode(fakeEvent("login with password=" + CANARY + " done"));
         String output = new String(bytes);
-        assertThat(output).doesNotContain("supersecret");
+        assertThat(output).doesNotContain(CANARY);
         encoder.stop();
     }
 

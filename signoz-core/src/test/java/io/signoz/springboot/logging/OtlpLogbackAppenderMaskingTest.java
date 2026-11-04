@@ -39,6 +39,9 @@ class OtlpLogbackAppenderMaskingTest {
     private static final String PAN_16 = "4111111111111234";
     private static final String PAN_19 = "5061051800019666567";
 
+    /** Value planted in a sensitive position; it must never appear in masked output. */
+    private static final String CANARY = "s3cret";
+
     private OtlpLogbackAppender appender;
     private LogRecordBuilder recordBuilder;
 
@@ -122,7 +125,7 @@ class OtlpLogbackAppenderMaskingTest {
     @DisplayName("MDC values are masked by key, not exported raw as attributes")
     void masksMdcValues() {
         Map<String, String> mdc = new HashMap<>();
-        mdc.put("password", "hunter2");
+        mdc.put("password", CANARY);
         mdc.put("traceId", "d4df5a34d93a7d12");
         appender.doAppend(eventWith("login attempt", mdc));
 
@@ -131,7 +134,7 @@ class OtlpLogbackAppenderMaskingTest {
         verify(recordBuilder).setAllAttributes(attrs.capture());
 
         String rendered = attrs.getValue().toString();
-        assertThat(rendered).doesNotContain("hunter2");
+        assertThat(rendered).doesNotContain(CANARY);
         assertThat(rendered).as("non-sensitive MDC must survive").contains("d4df5a34d93a7d12");
     }
 

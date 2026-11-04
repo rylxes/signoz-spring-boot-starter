@@ -12,6 +12,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class MaskingRegistryTest {
 
+    /**
+     * Value planted in a sensitive position; it must never appear in masked output. At least eight
+     * characters, because the built-in bearer-token pattern only matches tokens of that length.
+     */
+    private static final String CANARY = "s3cret-canary";
+
     private MaskingRegistry registry;
 
     @BeforeEach
@@ -24,13 +30,13 @@ class MaskingRegistryTest {
 
     @Test
     void masksPasswordField() {
-        assertThat(registry.mask("password", "MySecret123")).isEqualTo("***");
+        assertThat(registry.mask("password", CANARY)).isEqualTo("***");
     }
 
     @Test
     void maskIsCaseInsensitiveForFieldName() {
-        assertThat(registry.mask("PASSWORD", "secret")).isEqualTo("***");
-        assertThat(registry.mask("Password", "secret")).isEqualTo("***");
+        assertThat(registry.mask("PASSWORD", CANARY)).isEqualTo("***");
+        assertThat(registry.mask("Password", CANARY)).isEqualTo("***");
     }
 
     @Test
@@ -45,7 +51,7 @@ class MaskingRegistryTest {
 
     @Test
     void maskJsonStringMasksPasswordInJson() {
-        String json = "{\"username\":\"john\",\"password\":\"supersecret\"}";
+        String json = "{\"username\":\"john\",\"password\":\"" + CANARY + "\"}";
         String masked = registry.maskJsonString(json);
         assertThat(masked).contains("\"password\":\"***\"");
         assertThat(masked).contains("\"username\":\"john\"");
@@ -53,10 +59,10 @@ class MaskingRegistryTest {
 
     @Test
     void maskMessageRedactsBearerToken() {
-        String msg = "Request with Authorization: Bearer eyJhbGciOiJSUzI1NiJ9.payload.signature";
+        String msg = "Request with Authorization: Bearer " + CANARY;
         String masked = registry.maskMessage(msg);
         assertThat(masked).contains("Bearer ***");
-        assertThat(masked).doesNotContain("eyJhbGciOiJSUzI1NiJ9");
+        assertThat(masked).doesNotContain(CANARY);
     }
 
     @Test
@@ -77,6 +83,6 @@ class MaskingRegistryTest {
         SigNozLoggingProperties props = new SigNozLoggingProperties();
         props.setMaskEnabled(false);
         MaskingRegistry disabledRegistry = new MaskingRegistry(props);
-        assertThat(disabledRegistry.mask("password", "secret")).isEqualTo("secret");
+        assertThat(disabledRegistry.mask("password", CANARY)).isEqualTo(CANARY);
     }
 }
