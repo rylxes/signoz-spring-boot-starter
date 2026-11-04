@@ -75,7 +75,8 @@ else on and checks every WARN and ERROR still gets through.
 
 **Export** (`ExportTest`): the defaults (no endpoint set), the SigNoz ingestion key (sent but never
 printed), OTLP/HTTP with per-signal endpoints, Grafana Cloud (Basic auth, SigNoz key withheld),
-Micrometer metrics, no metrics without the registry, and an unreachable collector that must not
+Micrometer metrics from the starter's registry (its resource attributes, and the ingestion key on
+Spring Boot 3), no metrics without the registry, and an unreachable collector that must not
 slow down or break the app.
 
 **Other setups**: Log4j2 instead of Logback (`Log4j2BackendTest`), and the OpenTelemetry Java agent

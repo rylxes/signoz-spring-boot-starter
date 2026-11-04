@@ -32,7 +32,11 @@ import org.springframework.context.annotation.Import;
  * <p>Identical purpose to the SB2 counterpart; uses {@code @AutoConfiguration}
  * (SB3 preferred) and imports all sub-configurations.
  */
-@AutoConfiguration
+// Its OTLP registry must be registered before Spring Boot's (which backs off when one exists).
+@AutoConfiguration(beforeName = {
+        "org.springframework.boot.actuate.autoconfigure.metrics.export.otlp.OtlpMetricsExportAutoConfiguration",
+        "org.springframework.boot.actuate.autoconfigure.metrics.export.simple.SimpleMetricsExportAutoConfiguration"
+})
 @ConditionalOnProperty(name = "signoz.enabled", havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties({
         SigNozProperties.class,

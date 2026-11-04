@@ -129,7 +129,7 @@ class ExportTest extends E2eTestBase {
 
     @Test
     void metricsAreExportedThroughMicrometer() throws Exception {
-        ServiceProcess a = startSingle(exporting());
+        ServiceProcess a = startSingle(exporting("signoz.headers.signoz-ingestion-key", KEY));
         for (int i = 0; i < 3; i++) {
             Http.get(a.baseUrl() + "/e2e/hello?name=m" + i);
         }
@@ -145,6 +145,18 @@ class ExportTest extends E2eTestBase {
         }, 20_000, "metrics from e2e-a; got " + receiver().metrics());
         assertThat(names).contains("jvm.memory.used", "http.server.requests", "e2e.timed", "e2e.failures");
         assertThat(requests(OtlpReceiver.Signal.METRICS)).anyMatch(r -> "http".equals(r.transport) && "/v1/metrics".equals(r.path));
+        // The starter's registry, not Spring Boot's: it carries the signoz.* resource attributes.
+        assertThat(receiver().metrics()).filteredOn(m -> "e2e-a".equals(m.service()))
+                .allMatch(m -> "9.9.9".equals(m.resource.get("service.version"))
+                        && "e2e".equals(m.resource.get("deployment.environment")));
+        if (bootVersion() >= 3) {
+            assertThat(requests(OtlpReceiver.Signal.METRICS)).isNotEmpty()
+                    .allMatch(r -> KEY.equals(r.headers.get("signoz-ingestion-key")));
+        } else {
+            // Micrometer 1.9 (Spring Boot 2.7) cannot send headers; the starter says so once.
+            assertThat(a.lines()).anyMatch(l -> l.contains("cannot send headers") && l.contains("signoz-ingestion-key"));
+        }
+        assertThat(a.lines()).as("credentials never logged").noneMatch(l -> l.contains(KEY));
     }
 
     @Test

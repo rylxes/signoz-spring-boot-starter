@@ -15,6 +15,10 @@
   out with `signoz.web.reactive-context-propagation=false`. The Boot 3 module now
   depends on `io.micrometer:context-propagation` (small, no transitive
   dependencies). (#4)
+- **Spring Boot 3 metrics now use the starter's OTLP registry** (`signoz.endpoint`, exporter
+  headers, `signoz.*` resource attributes) instead of Spring Boot's, so
+  `management.otlp.metrics.export.*` no longer applies. Declare your own `OtlpMeterRegistry`
+  bean to keep a custom setup. See *Fixed* below.
 - **The servlet `UserContextMdcFilter`** is registered only in servlet web apps; it
   was previously registered in every application. (#4)
 - **Logback JSON console output fails closed:** if masking throws, the line's
@@ -158,6 +162,17 @@
   `SigNozDatabaseAutoConfiguration` and `SigNozDatabaseProperties` were "not eligible for getting
   processed by all BeanPostProcessors". The slow-query post-processor is now declared so that
   nothing is created early.
+- **The starter never created its OTLP metrics registry.** `SigNozMetricsConfig` was registered as
+  a plain bean, so its `otlpMeterRegistry()` factory method was never called. On Spring Boot 2 no
+  metrics were exported at all. On Spring Boot 3, Spring Boot's own registry exported them instead,
+  ignoring `signoz.endpoint`, the exporter headers (so SigNoz Cloud and Grafana Cloud rejected
+  them) and the `service.version` and `deployment.environment` attributes. The registry is now
+  registered by `SigNozMetricsAutoConfiguration`, and the `@Timed` and `@AlertOnFailure` aspects
+  use the only or primary `MeterRegistry`. Before, an application with two registries and no
+  primary one failed to start.
+- **Metrics on Spring Boot 2 cannot carry headers.** Micrometer 1.9's OTLP registry has no way to
+  send them, so the starter now warns at startup when the ingestion key or Basic auth is
+  configured ([Metrics](docs/METRICS.md#jvm-and-http-metrics)).
 - **WebFlux handlers behind Spring Security logged without trace IDs** on Spring Boot 2 (and on
   Spring Boot 3 with `signoz.web.reactive-context-propagation=false`) when
   `signoz.user-context.enabled=false`. Spring Security's filter chain loads the session on another

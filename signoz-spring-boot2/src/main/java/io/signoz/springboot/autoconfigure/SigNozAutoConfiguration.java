@@ -19,6 +19,7 @@ import io.signoz.springboot.properties.SigNozTracingProperties;
 import io.signoz.springboot.properties.SigNozUserContextProperties;
 import io.signoz.springboot.properties.SigNozWebProperties;
 import io.signoz.springboot.properties.SigNozWebSocketProperties;
+import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -42,6 +43,8 @@ import org.springframework.context.annotation.Import;
  * Set {@code signoz.enabled=false} to disable the entire integration.
  */
 @Configuration
+// Its OTLP registry must be registered before Actuator decides whether to add a simple one.
+@AutoConfigureBefore(name = "org.springframework.boot.actuate.autoconfigure.metrics.export.simple.SimpleMetricsExportAutoConfiguration")
 @ConditionalOnProperty(name = "signoz.enabled", havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties({
         SigNozProperties.class,

@@ -92,6 +92,15 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Micrometer OTLP registry: the bean type of SigNozMetricsAutoConfiguration (optional). -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-otlp</artifactId>
+            <!-- What Spring Boot 2.7 manages; the parent's version is for the Boot 3 line. -->
+            <version>1.9.17</version>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

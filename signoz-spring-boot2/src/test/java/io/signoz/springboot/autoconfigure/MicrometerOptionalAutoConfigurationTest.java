@@ -2,6 +2,7 @@ package io.signoz.springboot.autoconfigure;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.registry.otlp.OtlpMeterRegistry;
 import io.opentelemetry.api.OpenTelemetry;
 import io.signoz.springboot.alerts.AlertOnFailureAspect;
 import io.signoz.springboot.timed.TimedAspect;
@@ -56,9 +57,10 @@ class MicrometerOptionalAutoConfigurationTest {
     }
 
     @Test
-    void aspectsReceiveTheMeterRegistryWhenOneExists() {
+    void aspectsUseThePrimaryRegistry() {
+        // Actuator's CompositeMeterRegistry is primary whenever there is more than one registry.
         MeterRegistry registry = new SimpleMeterRegistry();
-        runner().withBean(MeterRegistry.class, () -> registry).run(ctx -> {
+        runner().withBean(MeterRegistry.class, () -> registry, d -> d.setPrimary(true)).run(ctx -> {
             assertThat(ctx).hasNotFailed();
             assertThat(ReflectionTestUtils.getField(ctx.getBean(TimedAspect.class), "meterRegistry"))
                     .isSameAs(registry);
@@ -68,8 +70,17 @@ class MicrometerOptionalAutoConfigurationTest {
     }
 
     @Test
-    void aspectsCreatedWithoutARegistryWhenMicrometerIsPresentButNoBeanExists() {
+    void aspectsUseTheStartersOtlpRegistryWhenItIsTheOnlyOne() {
         runner().run(ctx -> {
+            assertThat(ctx).hasNotFailed();
+            assertThat(ReflectionTestUtils.getField(ctx.getBean(TimedAspect.class), "meterRegistry"))
+                    .isSameAs(ctx.getBean(OtlpMeterRegistry.class));
+        });
+    }
+
+    @Test
+    void severalRegistriesWithoutAPrimaryDoNotStopTheApplication() {
+        runner().withBean(MeterRegistry.class, SimpleMeterRegistry::new).run(ctx -> {
             assertThat(ctx).hasNotFailed();
             assertThat(ReflectionTestUtils.getField(ctx.getBean(TimedAspect.class), "meterRegistry")).isNull();
             assertThat(ReflectionTestUtils.getField(ctx.getBean(AlertOnFailureAspect.class), "meterRegistry")).isNull();
