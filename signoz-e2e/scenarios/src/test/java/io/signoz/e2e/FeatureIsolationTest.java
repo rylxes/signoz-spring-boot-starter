@@ -231,12 +231,12 @@ class FeatureIsolationTest extends E2eTestBase {
     @Test
     void sqsCarriesTheTraceToTheListener() throws Exception {
         try (SqsServer sqs = SqsServer.start()) {
-            sqs.createQueue("e2e-to-a");
+            String toA = sqs.createQueue("e2e-to-a");
             String toB = sqs.createQueue("e2e-to-b");
             Options a = only("signoz.sqs.enabled", "true", "e2e.sqs.enabled", "true", "e2e.sqs.endpoint", sqs.endpoint(),
                     "e2e.sqs.in-queue", "e2e-to-a", "e2e.sqs.out-queue-url", toB);
             Options b = only("signoz.sqs.enabled", "true", "e2e.sqs.enabled", "true", "e2e.sqs.endpoint", sqs.endpoint(),
-                    "e2e.sqs.in-queue", "e2e-to-b", "e2e.sqs.out-queue-url", toB);
+                    "e2e.sqs.in-queue", "e2e-to-b", "e2e.sqs.out-queue-url", toA);
             Pair pair = startPair(a, b);
 
             assertThat(Http.post(pair.a.baseUrl() + "/e2e/sqs?payload=q-1", "text/plain", "", headers("traceparent", INBOUND)).status)

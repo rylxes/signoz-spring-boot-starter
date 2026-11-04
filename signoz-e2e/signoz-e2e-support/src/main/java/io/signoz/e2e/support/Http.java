@@ -52,8 +52,12 @@ public final class Http {
             }
         }
         int status = c.getResponseCode();
-        InputStream in = status >= 400 ? c.getErrorStream() : c.getInputStream();
-        String text = in == null ? "" : new String(OtlpReceiver.readAll(in), StandardCharsets.UTF_8);
+        String text = "";
+        try (InputStream in = status >= 400 ? c.getErrorStream() : c.getInputStream()) {
+            if (in != null) {
+                text = new String(OtlpReceiver.readAll(in), StandardCharsets.UTF_8);
+            }
+        }
         Map<String, String> responseHeaders = new LinkedHashMap<String, String>();
         for (Map.Entry<String, List<String>> e : c.getHeaderFields().entrySet()) {
             if (e.getKey() != null && !e.getValue().isEmpty()) {
