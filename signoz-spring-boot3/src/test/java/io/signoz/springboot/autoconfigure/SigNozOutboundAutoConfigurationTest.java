@@ -1,27 +1,45 @@
 package io.signoz.springboot.autoconfigure;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import io.opentelemetry.api.OpenTelemetry;
 import io.signoz.springboot.masking.MaskingRegistry;
 import io.signoz.springboot.outbound.TracingRestTemplateInterceptor;
 import io.signoz.springboot.outbound.TracingWebClientFilter;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.web.client.RestTemplateCustomizer;
 import org.springframework.boot.web.reactive.function.client.WebClientCustomizer;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 /**
  * The outbound clients only mask the query strings they log if the auto-configuration hands them
  * the application's {@link MaskingRegistry}; a client built without one logs the query as is.
+ *
+ * <p>The status tests make a real call through a customized client against a response built by
+ * Spring, not a mock, so they fail if the client calls a status method this Spring version no
+ * longer has ({@code ClientResponse.rawStatusCode()} is gone from Spring 6.1, and
+ * {@code ClientHttpResponse.getRawStatusCode()} from Spring 7.0).
  */
 class SigNozOutboundAutoConfigurationTest {
 
@@ -29,6 +47,22 @@ class SigNozOutboundAutoConfigurationTest {
             .withConfiguration(AutoConfigurations.of(SigNozAutoConfiguration.class))
             .withBean("openTelemetry", OpenTelemetry.class, OpenTelemetry::noop)
             .withPropertyValues("signoz.tracing.enabled=false");
+
+    private ListAppender<ILoggingEvent> appender;
+    private Logger outboundLogger;
+
+    @BeforeEach
+    void attachAppender() {
+        outboundLogger = (Logger) LoggerFactory.getLogger("SIGNOZ_OUTBOUND");
+        appender = new ListAppender<ILoggingEvent>();
+        appender.start();
+        outboundLogger.addAppender(appender);
+    }
+
+    @AfterEach
+    void detachAppender() {
+        outboundLogger.detachAppender(appender);
+    }
 
     @Test
     void restTemplateInterceptorReceivesTheMaskingRegistry() {
@@ -60,5 +94,61 @@ class SigNozOutboundAutoConfigurationTest {
             assertThat(ReflectionTestUtils.getField(filter, "maskingRegistry"))
                     .isSameAs(ctx.getBean(MaskingRegistry.class));
         });
+    }
+
+    @Test
+    void restTemplateCallLogsTheResponseStatus() {
+        runner.run(ctx -> {
+            RestTemplate restTemplate = new RestTemplate();
+            ctx.getBean("sigNozRestTemplateCustomizer", RestTemplateCustomizer.class).customize(restTemplate);
+            MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
+            server.expect(requestTo("https://api.example.com/orders")).andRespond(withStatus(HttpStatus.CREATED));
+
+            restTemplate.getForEntity("https://api.example.com/orders", String.class);
+
+            server.verify();
+            assertThat(lastLine()).matches(
+                    "\\[SigNoz] Outbound GET https://api\\.example\\.com/orders -> 201 in \\d+ms");
+        });
+    }
+
+    @Test
+    void webClientCallLogsTheResponseStatus() {
+        runner.run(ctx -> {
+            WebClient client = customizedWebClient(ctx.getBean("sigNozWebClientCustomizer", WebClientCustomizer.class),
+                    ClientResponse.create(HttpStatus.CREATED).build());
+
+            client.get().uri("https://api.example.com/orders").retrieve().toBodilessEntity().block();
+
+            assertThat(lastLine()).matches(
+                    "\\[SigNoz] Outbound GET https://api\\.example\\.com/orders -> 201 in \\d+ms");
+        });
+    }
+
+    @Test
+    void webClientCallLogsANonStandardResponseStatus() {
+        runner.run(ctx -> {
+            WebClient client = customizedWebClient(ctx.getBean("sigNozWebClientCustomizer", WebClientCustomizer.class),
+                    ClientResponse.create(HttpStatusCode.valueOf(499)).build());
+
+            client.get().uri("https://api.example.com/orders").exchangeToMono(ClientResponse::releaseBody).block();
+
+            assertThat(lastLine()).startsWith("[SigNoz] Outbound GET https://api.example.com/orders -> 499 in ");
+        });
+    }
+
+    /**
+     * A {@link WebClient} customized by {@code customizer} whose exchanges all return
+     * {@code response} without touching the network.
+     */
+    private static WebClient customizedWebClient(WebClientCustomizer customizer, ClientResponse response) {
+        WebClient.Builder builder = WebClient.builder().exchangeFunction(request -> Mono.just(response));
+        customizer.customize(builder);
+        return builder.build();
+    }
+
+    private String lastLine() {
+        assertThat(appender.list).isNotEmpty();
+        return appender.list.get(appender.list.size() - 1).getFormattedMessage();
     }
 }

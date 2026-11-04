@@ -32,6 +32,13 @@ public class TracingWebClientFilter implements ExchangeFilterFunction {
 
     private static final Logger logger = LoggerFactory.getLogger("SIGNOZ_OUTBOUND");
 
+    /**
+     * Reads the status on Spring 5, 6 and 7: {@code ClientResponse.rawStatusCode()} was removed in
+     * Spring 6.1. See {@link ResponseStatusReader}.
+     */
+    private static final ResponseStatusReader STATUS =
+            new ResponseStatusReader(ClientResponse.class, "rawStatusCode", "statusCode");
+
     private final SigNozOutboundProperties properties;
     private final MaskingRegistry maskingRegistry;
 
@@ -89,7 +96,7 @@ public class TracingWebClientFilter implements ExchangeFilterFunction {
                             logger.info("[SigNoz] Outbound {} {} -> {} in {}ms",
                                     modifiedRequest.method(),
                                     OutboundUrl.forLog(modifiedRequest.url(), maskingRegistry),
-                                    response.rawStatusCode(),
+                                    STATUS.read(response),
                                     duration);
                         }
                     })

@@ -77,6 +77,17 @@
   The logged URL now has sensitive query parameters masked the same way as inbound requests,
   user info (`https://user:pass@host`) replaced with `***` and the fragment dropped; the URL
   inside a logged exception message is masked too.
+- **WebClient on Spring Boot 3.2+:** with `signoz.outbound.log-requests` on (the
+  default), every successful `WebClient` call failed with `NoSuchMethodError:
+  ClientResponse.rawStatusCode()`, because Spring Framework 6.1 removed that method. The
+  status is now read in a way that works on Spring 5 and 6, including non-standard codes
+  such as 499; if it can't be read, `-1` is logged and the call is unaffected.
+- **RestTemplate on Spring Framework 7 (Spring Boot 4):** the outbound interceptor
+  called `ClientHttpResponse.getRawStatusCode()`, which Spring 7.0 removed, so with
+  outbound logging on every `RestTemplate` call would fail with `NoSuchMethodError`.
+  It is still present (deprecated for removal) in Spring 6.2. Both outbound clients
+  now read the status in a way that works on Spring 5, 6 and 7, and logging the
+  status can no longer fail the call.
 - **Security:** field names matched only as listed, apart from case. `access_token` in
   `masked-fields` left `accessToken` and `access-token` in clear, and names no list
   anticipates, such as `auth_token`, `clientSecret` or `X-Amz-Signature`, were never masked.
