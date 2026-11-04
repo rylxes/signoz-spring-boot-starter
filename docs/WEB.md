@@ -65,6 +65,7 @@ filters. All `signoz.web.*` and `signoz.user-context.*` properties apply unchang
 | `TraceIdMdcFilter` | `TraceIdWebFilter` | `HIGHEST_PRECEDENCE + 1` |
 | `HttpLoggingFilter` | `HttpLoggingWebFilter` | `HIGHEST_PRECEDENCE + 2` |
 | `UserContextMdcFilter` | `UserContextWebFilter` | `0` (after Spring Security's `-100`) |
+| – | `MdcRestoringWebFilter` | `LOWEST_PRECEDENCE` (re-applies the IDs if an earlier filter switched threads) |
 
 What you get per request:
 

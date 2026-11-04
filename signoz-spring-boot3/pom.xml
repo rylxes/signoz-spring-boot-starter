@@ -120,6 +120,13 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Micrometer OTLP registry: the bean type of SigNozMetricsAutoConfiguration (optional). -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-otlp</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

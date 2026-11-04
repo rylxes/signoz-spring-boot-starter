@@ -33,7 +33,7 @@ public class SigNozAlertAutoConfiguration {
         /**
          * Creates the {@link AlertOnFailureAspect} bean.
          *
-         * @param registry   optional Micrometer {@code MeterRegistry}; {@code null} when absent
+         * @param registry   optional Micrometer {@code MeterRegistry}: the only or primary one, else {@code null}
          * @param alertProps configuration properties for the alert feature
          * @return a configured {@link AlertOnFailureAspect}
          */
@@ -42,7 +42,7 @@ public class SigNozAlertAutoConfiguration {
         public AlertOnFailureAspect alertOnFailureAspect(
                 ObjectProvider<io.micrometer.core.instrument.MeterRegistry> registry,
                 SigNozAlertProperties alertProps) {
-            return new AlertOnFailureAspect(registry.getIfAvailable(), alertProps);
+            return new AlertOnFailureAspect(registry.getIfUnique(), alertProps);
         }
     }
 

@@ -1,6 +1,5 @@
 package io.signoz.springboot.metrics;
 
-import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.binder.jvm.ClassLoaderMetrics;
 import io.micrometer.core.instrument.binder.jvm.JvmGcMetrics;
 import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics;
@@ -11,32 +10,32 @@ import io.micrometer.registry.otlp.OtlpConfig;
 import io.signoz.springboot.export.OtlpExporterSettings;
 import io.micrometer.registry.otlp.OtlpMeterRegistry;
 import io.signoz.springboot.properties.SigNozProperties;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Configures Micrometer to export metrics to SigNoz via the OTLP registry.
+ * Builds the Micrometer OTLP registry that exports metrics to {@code signoz.endpoint}.
  *
- * <p>Registers:
+ * <p>The registry:
  * <ul>
- *   <li>OTLP meter registry pointing at {@code signoz.endpoint}</li>
- *   <li>JVM metrics: memory, GC, threads, classes, CPU</li>
- *   <li>Process metrics: uptime</li>
- *   <li>Common tags: {@code service.name}, {@code environment}</li>
+ *   <li>sends to the metrics endpoint resolved from the {@code signoz.*} exporter settings,
+ *       with their headers (the SigNoz ingestion key, or Grafana Cloud's Basic auth)</li>
+ *   <li>binds JVM metrics: memory, GC, threads, classes, CPU, and process uptime</li>
+ *   <li>carries {@code service.name}, {@code service.version} and
+ *       {@code deployment.environment} as resource attributes</li>
  * </ul>
  *
- * <p>Spring Boot's Actuator auto-configuration will also pick up the
- * {@code OtlpMeterRegistry} bean and add HTTP server metrics automatically.
+ * <p>This is a plain factory, not a configuration class: the Boot modules'
+ * {@code SigNozMetricsAutoConfiguration} registers {@link #otlpMeterRegistry()} as a bean, and
+ * Actuator then adds HTTP server metrics to it.
  */
-@Configuration
-@ConditionalOnClass({MeterRegistry.class, OtlpMeterRegistry.class})
 public class SigNozMetricsConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(SigNozMetricsConfig.class);
 
     private final SigNozProperties props;
 
@@ -44,10 +43,16 @@ public class SigNozMetricsConfig {
         this.props = props;
     }
 
-    @Bean
-    @ConditionalOnMissingBean(OtlpMeterRegistry.class)
     public OtlpMeterRegistry otlpMeterRegistry() {
         final OtlpExporterSettings exportSettings = OtlpExporterSettings.resolve(props);
+        if (!exportSettings.getHeaders().isEmpty() && !registrySendsHeaders()) {
+            // Header names only: their values are credentials.
+            log.warn("[SigNoz] micrometer-registry-otlp {} cannot send headers, so metrics go to {} without {}. "
+                    + "A collector that requires them will reject the metrics. Upgrade "
+                    + "micrometer-registry-otlp to 1.11 or later, or send metrics through a local collector.",
+                    OtlpMeterRegistry.class.getPackage().getImplementationVersion(),
+                    exportSettings.micrometerMetricsUrl(), exportSettings.getHeaders().keySet());
+        }
         OtlpConfig config = new OtlpConfig() {
             @Override
             public String get(String key) {
@@ -93,5 +98,15 @@ public class SigNozMetricsConfig {
         new UptimeMetrics().bindTo(registry);
 
         return registry;
+    }
+
+    /** {@code OtlpConfig.headers()} arrived in Micrometer 1.11; Spring Boot 2.7 ships 1.9. */
+    static boolean registrySendsHeaders() {
+        try {
+            OtlpConfig.class.getMethod("headers");
+            return true;
+        } catch (NoSuchMethodException e) {
+            return false;
+        }
     }
 }

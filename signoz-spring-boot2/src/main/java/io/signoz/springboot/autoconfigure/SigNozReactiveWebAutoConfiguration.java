@@ -3,6 +3,7 @@ package io.signoz.springboot.autoconfigure;
 import io.signoz.springboot.masking.MaskingRegistry;
 import io.signoz.springboot.properties.SigNozProperties;
 import io.signoz.springboot.webflux.HttpLoggingWebFilter;
+import io.signoz.springboot.webflux.MdcRestoringWebFilter;
 import io.signoz.springboot.webflux.TraceIdWebFilter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
@@ -27,6 +28,13 @@ public class SigNozReactiveWebAutoConfiguration {
     @ConditionalOnMissingBean
     public TraceIdWebFilter traceIdWebFilter() {
         return new TraceIdWebFilter();
+    }
+
+    /** Puts the request's IDs back on the thread before the handler, after any filter hopped threads. */
+    @Bean
+    @ConditionalOnMissingBean
+    public MdcRestoringWebFilter mdcRestoringWebFilter() {
+        return new MdcRestoringWebFilter();
     }
 
     @Bean

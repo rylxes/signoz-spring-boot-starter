@@ -34,14 +34,14 @@ public class SigNozTimedAutoConfiguration {
          * Creates the {@link TimedAspect} bean.
          *
          * @param timedProps configuration properties for the timed feature
-         * @param registry   optional Micrometer {@code MeterRegistry}; {@code null} when absent
+         * @param registry   optional Micrometer {@code MeterRegistry}: the only or primary one, else {@code null}
          * @return a configured {@link TimedAspect}
          */
         @Bean
         @ConditionalOnMissingBean
         public TimedAspect timedAspect(SigNozTimedProperties timedProps,
                                        ObjectProvider<io.micrometer.core.instrument.MeterRegistry> registry) {
-            return new TimedAspect(registry.getIfAvailable(), timedProps);
+            return new TimedAspect(registry.getIfUnique(), timedProps);
         }
     }
 

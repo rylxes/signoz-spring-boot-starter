@@ -142,6 +142,11 @@
                         <goals><goal>add-test-source</goal></goals>
                         <configuration><sources><source>${project.basedir}/../scenarios/src/test/java</source></sources></configuration>
                     </execution>
+                    <execution>
+                        <id>shared-scenario-resources</id>
+                        <goals><goal>add-test-resource</goal></goals>
+                        <configuration><resources><resource><directory>${project.basedir}/../scenarios/src/test/resources</directory></resource></resources></configuration>
+                    </execution>
                 </executions>
             </plugin>
             <plugin>

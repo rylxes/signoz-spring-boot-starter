@@ -30,6 +30,14 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- The parent POM manages the registry at the Boot 3 line's version, and an inherited
+                 managed version beats an imported BOM. Use what Spring Boot 2.7 manages, which is
+                 what a Boot 2 application that adds the registry gets. -->
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-registry-otlp</artifactId>
+                <version>1.9.17</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -136,6 +144,11 @@
                         <id>shared-scenarios</id>
                         <goals><goal>add-test-source</goal></goals>
                         <configuration><sources><source>${project.basedir}/../scenarios/src/test/java</source></sources></configuration>
+                    </execution>
+                    <execution>
+                        <id>shared-scenario-resources</id>
+                        <goals><goal>add-test-resource</goal></goals>
+                        <configuration><resources><resource><directory>${project.basedir}/../scenarios/src/test/resources</directory></resource></resources></configuration>
                     </execution>
                 </executions>
             </plugin>

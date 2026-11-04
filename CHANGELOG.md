@@ -15,6 +15,10 @@
   out with `signoz.web.reactive-context-propagation=false`. The Boot 3 module now
   depends on `io.micrometer:context-propagation` (small, no transitive
   dependencies). (#4)
+- **Spring Boot 3 metrics now use the starter's OTLP registry** (`signoz.endpoint`, exporter
+  headers, `signoz.*` resource attributes) instead of Spring Boot's, so
+  `management.otlp.metrics.export.*` no longer applies. Declare your own `OtlpMeterRegistry`
+  bean to keep a custom setup. See *Fixed* below.
 - **The servlet `UserContextMdcFilter`** is registered only in servlet web apps; it
   was previously registered in every application. (#4)
 - **Logback JSON console output fails closed:** if masking throws, the line's
@@ -120,6 +124,11 @@
   `micrometer-core` failed to start with `ClassNotFoundException: MeterRegistry`.
   `@Timed` and `@AlertOnFailure` now log without it, as documented; metrics are
   still recorded when a `MeterRegistry` bean exists.
+- **Spring Boot 2 applications built with Gradle failed to start.** The Spring Boot 2
+  starter needs `logstash-logback-encoder` 7.3, the last version that works with Logback 1.2,
+  but `signoz-core` asked for 7.4. Maven picked 7.3; Gradle picks the highest version, 7.4,
+  which calls a Logback 1.3 method, so the first JSON log line threw `NoSuchMethodError` and
+  startup failed. Every module now uses 7.3, which works with Logback 1.2 to 1.4.
 - **WebClient calls were often not traced.** The starter's `WebClientCustomizer` bean was
   declared with return type `Object`, so Spring Boot only found it if it already existed when
   a `WebClient.Builder` was created. A builder injected into an application bean (the usual
@@ -153,6 +162,22 @@
   `SigNozDatabaseAutoConfiguration` and `SigNozDatabaseProperties` were "not eligible for getting
   processed by all BeanPostProcessors". The slow-query post-processor is now declared so that
   nothing is created early.
+- **The starter never created its OTLP metrics registry.** `SigNozMetricsConfig` was registered as
+  a plain bean, so its `otlpMeterRegistry()` factory method was never called. On Spring Boot 2 no
+  metrics were exported at all. On Spring Boot 3, Spring Boot's own registry exported them instead,
+  ignoring `signoz.endpoint`, the exporter headers (so SigNoz Cloud and Grafana Cloud rejected
+  them) and the `service.version` and `deployment.environment` attributes. The registry is now
+  registered by `SigNozMetricsAutoConfiguration`, and the `@Timed` and `@AlertOnFailure` aspects
+  use the only or primary `MeterRegistry`. Before, an application with two registries and no
+  primary one failed to start.
+- **Metrics on Spring Boot 2 cannot carry headers.** Micrometer 1.9's OTLP registry has no way to
+  send them, so the starter now warns at startup when the ingestion key or Basic auth is
+  configured ([Metrics](docs/METRICS.md#jvm-and-http-metrics)).
+- **WebFlux handlers behind Spring Security logged without trace IDs** on Spring Boot 2 (and on
+  Spring Boot 3 with `signoz.web.reactive-context-propagation=false`) when
+  `signoz.user-context.enabled=false`. Spring Security's filter chain loads the session on another
+  thread, and only the user-context filter put the IDs back afterwards. A new
+  `MdcRestoringWebFilter`, last in the chain, now restores them before every handler.
 - **`@SigNozLog` compiler warning:** builds at Java 11 and later warned "Supported source version
   'RELEASE_8' from annotation processor ... less than -source". The processor now supports the
   running compiler's version.
