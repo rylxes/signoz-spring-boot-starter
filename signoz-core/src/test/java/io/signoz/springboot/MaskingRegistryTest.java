@@ -22,6 +22,24 @@ class MaskingRegistryTest {
         registry = new MaskingRegistry(props);
     }
 
+    /**
+     * A list renders as {@code [a, b]} (Lombok toString, StructuredArguments, Arrays.toString). The
+     * value used to stop at the first comma, so only the first element was masked.
+     */
+    @Test
+    void keyValueListIsMaskedAsAWhole() {
+        String masked = registry.maskJsonString("login apikey=[key-aaaa1111, key-bbbb2222] user=bob");
+
+        assertThat(masked).isEqualTo("login apikey=*** user=bob");
+    }
+
+    @Test
+    void freeTextPasswordListIsMaskedAsAWhole() {
+        String masked = registry.maskMessage("rotated pwd=[old-aaaa1111, new-bbbb2222] done");
+
+        assertThat(masked).isEqualTo("rotated pwd=*** done");
+    }
+
     @Test
     void masksPasswordField() {
         assertThat(registry.mask("password", "MySecret123")).isEqualTo("***");

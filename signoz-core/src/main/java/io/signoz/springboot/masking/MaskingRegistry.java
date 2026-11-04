@@ -80,7 +80,7 @@ public class MaskingRegistry {
 
         // Built-in message-level patterns (applied to free-form log text)
         messagePatterns.add(new RegexMaskingStrategy(
-                "(?i)(password|passwd|pwd)\\s*[=:\\s]+\\s*(\\S+)",
+                "(?i)(password|passwd|pwd)\\s*[=:\\s]+\\s*(\\[[^\\]\\r\\n]*\\]|\\S+)",
                 "$1=***"));
         messagePatterns.add(new RegexMaskingStrategy(
                 "(?i)(bearer\\s+)[A-Za-z0-9._\\-]{8,}",
@@ -237,13 +237,15 @@ public class MaskingRegistry {
      * <p>The leading {@code (?<![\w.-])} stops {@code pan} from matching inside {@code cardPan=},
      * which would mask from the wrong offset and leave the first characters of the real value
      * exposed. The value runs to the first separator that can legitimately end one in a form body,
-     * a query string or a Lombok {@code toString}.
+     * a query string or a Lombok {@code toString}. A value that opens with {@code [} runs to the
+     * matching {@code ]} instead: that is how a list or array renders ({@code tokens=[a, b]}), and
+     * stopping at the first comma would mask only the first element.
      */
     private Pattern kvFieldPattern(String fieldName) {
         Pattern cached = kvFieldPatterns.get(fieldName);
         if (cached == null) {
             cached = Pattern.compile(
-                    "(?<![\\w.-])(" + Pattern.quote(fieldName) + "\\s*=\\s*)([^&\\s,;)\"'}\\]]*)",
+                    "(?<![\\w.-])(" + Pattern.quote(fieldName) + "\\s*=\\s*)(\\[[^\\]\\r\\n]*\\]|[^&\\s,;)\"'}\\]]*)",
                     Pattern.CASE_INSENSITIVE);
             kvFieldPatterns.put(fieldName, cached);
         }

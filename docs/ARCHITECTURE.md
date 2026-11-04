@@ -230,8 +230,8 @@ MaskingRegistry (Spring @Component)
 `MaskingRegistry.maskJsonString(json)` — field-based + pattern scan over a JSON string
 
 `SigNozJsonEncoder` never runs these regexes over its serialised output line. Its second pass walks
-the line with a streaming JSON parser and masks each string value unescaped (sensitive field names
-via `mask`, everything else via `maskJsonString`). A free-text pattern such as `password=\S+` would
+the line with a streaming JSON parser and masks each string value unescaped (values under a sensitive
+field name via `mask`, including list elements and nested objects, everything else via `maskJsonString`). A free-text pattern such as `password=\S+` would
 otherwise run past the closing quote of the `message` value, because LogstashEncoder writes no
 whitespace between fields, and swallow the rest of the line.
 
