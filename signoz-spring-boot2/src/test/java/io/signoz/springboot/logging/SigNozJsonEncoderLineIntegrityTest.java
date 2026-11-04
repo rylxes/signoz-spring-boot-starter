@@ -13,7 +13,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 
+import ch.qos.logback.classic.encoder.PatternLayoutEncoder;
+
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -97,6 +101,70 @@ class SigNozJsonEncoderLineIntegrityTest {
         JsonNode node = JSON.readTree(line);
         assertThat(node.get("token").asText()).isEqualTo("***");
         assertThat(node.get("level").asText()).isEqualTo("INFO");
+    }
+
+    /**
+     * An array element has no field name of its own, so a list under a sensitive key used to be
+     * written verbatim, and its rendering in the message ({@code token=[a, b]}) was masked only up
+     * to the first comma.
+     */
+    @Test
+    void listUnderSensitiveKeyIsMaskedInFieldAndMessage() throws Exception {
+        String line = encode(event("rotated {}", new Object[]{StructuredArguments.keyValue(
+                "token", Arrays.asList("tok-aaaa1111", "tok-bbbb2222"))}, null, null));
+
+        assertThat(line).doesNotContain("tok-aaaa1111").doesNotContain("tok-bbbb2222");
+        JsonNode node = JSON.readTree(line);
+        assertThat(node.get("token").isArray()).isTrue();
+        assertThat(node.get("token").get(0).asText()).isEqualTo("***");
+        assertThat(node.get("token").get(1).asText()).isEqualTo("***");
+        assertThat(node.get("message").asText()).isEqualTo("rotated token=***");
+    }
+
+    @Test
+    void objectNestedUnderSensitiveKeyIsMasked() throws Exception {
+        String line = encode(event("issued {}", new Object[]{StructuredArguments.keyValue(
+                "token", Collections.singletonMap("value", "tok-cccc3333"))}, null, null));
+
+        assertThat(line).doesNotContain("tok-cccc3333");
+        JsonNode node = JSON.readTree(line);
+        assertThat(node.get("token").get("value").asText()).isEqualTo("***");
+        assertThat(node.get("level").asText()).isEqualTo("INFO");
+    }
+
+    /**
+     * With a prefix the line is not plain JSON. The object after the prefix must still get the
+     * per-value pass: regexes over the raw line miss JSON escaped inside the message and cannot see
+     * a list under a sensitive key at all.
+     */
+    @Test
+    void prefixedLineIsStillMaskedValueByValue() throws Exception {
+        SigNozJsonEncoder prefixed = new SigNozJsonEncoder();
+        prefixed.setContext(loggerContext);
+        prefixed.setMaskingRegistry(new MaskingRegistry(new SigNozLoggingProperties()));
+        PatternLayoutEncoder prefix = new PatternLayoutEncoder();
+        prefix.setContext(loggerContext);
+        prefix.setPattern("APP ");
+        prefix.start();
+        prefixed.setPrefix(prefix);
+        prefixed.start();
+        try {
+            String line = new String(prefixed.encode(event("login {} {}", new Object[]{
+                    "{\"user\":\"alice\",\"token\":\"tok-dddd4444\"}",
+                    StructuredArguments.keyValue("token", Arrays.asList("tok-eeee5555", "tok-ffff6666"))},
+                    null, null)), StandardCharsets.UTF_8);
+
+            assertThat(line).startsWith("APP {").contains("alice")
+                    .doesNotContain("tok-dddd4444").doesNotContain("tok-eeee5555").doesNotContain("tok-ffff6666");
+            JsonNode node = JSON.readTree(line.substring("APP ".length()));
+            assertThat(node.get("message").asText())
+                    .isEqualTo("login {\"user\":\"alice\",\"token\":\"***\"} token=***");
+            assertThat(node.get("token").get(0).asText()).isEqualTo("***");
+            assertThat(node.get("level").asText()).isEqualTo("INFO");
+        } finally {
+            prefixed.stop();
+            prefix.stop();
+        }
     }
 
     private String encode(LoggingEvent event) {
