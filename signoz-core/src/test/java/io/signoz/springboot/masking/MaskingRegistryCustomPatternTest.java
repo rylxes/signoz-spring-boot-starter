@@ -11,6 +11,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class MaskingRegistryCustomPatternTest {
 
+    /** Value planted in a sensitive position; it must never appear in masked output. */
+    private static final String CANARY = "s3cret";
+
     private MaskingRegistry registry;
 
     @BeforeEach
@@ -43,7 +46,7 @@ class MaskingRegistryCustomPatternTest {
 
     @Test
     void maskJsonStringMasksMultipleFields() {
-        String json = "{\"username\":\"john\",\"password\":\"s3cr3t\",\"ssn\":\"123-45-6789\"}";
+        String json = "{\"username\":\"john\",\"password\":\"" + CANARY + "\",\"ssn\":\"123-45-6789\"}";
         String masked = registry.maskJsonString(json);
         assertThat(masked).contains("\"password\":\"***\"");
         assertThat(masked).contains("\"ssn\":\"***\"");
@@ -51,7 +54,7 @@ class MaskingRegistryCustomPatternTest {
 
     @Test
     void maskJsonStringDoesNotCorruptUnrelatedFields() {
-        String json = "{\"username\":\"john\",\"password\":\"secret\",\"id\":\"42\"}";
+        String json = "{\"username\":\"john\",\"password\":\"" + CANARY + "\",\"id\":\"42\"}";
         String masked = registry.maskJsonString(json);
         assertThat(masked).contains("\"username\":\"john\"");
         assertThat(masked).contains("\"id\":\"42\"");

@@ -34,8 +34,8 @@ class TracingGrpcServerInterceptorTest {
 
         ServerCallHandler handler = (call, h) -> {
             // Inside the handler the MDC should be populated.
-            mdcSeen.set("0af7651916cd43dd8448eb211c80319c".equals(MDC.get("traceId"))
-                    && "b7ad6b7169203331".equals(MDC.get("spanId"))
+            mdcSeen.set("0af7651916cd43dd8448eb211c80319c".equals(MDC.get("trace_id"))
+                    && "b7ad6b7169203331".equals(MDC.get("span_id"))
                     && "req-abc".equals(MDC.get("requestId")));
             return mock(ServerCall.Listener.class);
         };
@@ -47,8 +47,8 @@ class TracingGrpcServerInterceptorTest {
 
         // After the listener completes, MDC must be cleared.
         listener.onComplete();
-        assertThat(MDC.get("traceId")).isNull();
-        assertThat(MDC.get("spanId")).isNull();
+        assertThat(MDC.get("trace_id")).isNull();
+        assertThat(MDC.get("span_id")).isNull();
         assertThat(MDC.get("requestId")).isNull();
     }
 
@@ -65,7 +65,7 @@ class TracingGrpcServerInterceptorTest {
                 mock(ServerCall.class), headers, handler);
 
         listener.onCancel();
-        assertThat(MDC.get("traceId")).isNull();
+        assertThat(MDC.get("trace_id")).isNull();
     }
 
     @Test
@@ -94,7 +94,7 @@ class TracingGrpcServerInterceptorTest {
         interceptor.interceptCall(realCall, headers, handler);
 
         assertThat(wasClosed.get()).isTrue();
-        assertThat(MDC.get("traceId")).isNull();
+        assertThat(MDC.get("trace_id")).isNull();
     }
 
     @Test
@@ -106,6 +106,6 @@ class TracingGrpcServerInterceptorTest {
         ServerCallHandler handler = (call, h) -> mock(ServerCall.Listener.class);
         interceptor.interceptCall(mock(ServerCall.class), headers, handler);
 
-        assertThat(MDC.get("traceId")).isNull();
+        assertThat(MDC.get("trace_id")).isNull();
     }
 }

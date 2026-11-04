@@ -102,6 +102,8 @@ signoz:
 
 ## Web / HTTP logging properties (`signoz.web.*`)
 
+These apply to both servlet (`HttpLoggingFilter`) and WebFlux (`HttpLoggingWebFilter`) applications.
+
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `signoz.web.log-requests` | `boolean` | `true` | Whether to log all inbound HTTP requests. Set to `false` to disable `HttpLoggingFilter` entirely. |
@@ -111,6 +113,7 @@ signoz:
 | `signoz.web.log-query-string` | `boolean` | `true` | Include query string parameters in the logged URI. |
 | `signoz.web.max-body-bytes` | `int` | `4096` | Maximum body size (in bytes) to include in the log entry. Larger bodies are truncated. |
 | `signoz.web.exclude-paths` | `List<String>` | see below | Ant-style path patterns that are excluded from HTTP logging. |
+| `signoz.web.reactive-context-propagation` | `boolean` | `true` | WebFlux on Spring Boot 3 only: register a context-propagation accessor for the SigNoz MDC and enable Reactor's automatic context propagation, so handler logs keep `requestId` and trace IDs after thread hops. When `false`, the MDC is present only up to a handler's first asynchronous boundary. |
 
 **Default `exclude-paths`:** `/actuator/**`, `/health`, `/health/**`, `/favicon.ico`
 
@@ -159,7 +162,7 @@ signoz:
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `signoz.messaging.enabled` | `boolean` | `true` | Enable/disable Kafka trace propagation interceptors. |
-| `signoz.messaging.propagate-trace` | `boolean` | `true` | Inject/extract `traceId` in Kafka record headers. |
+| `signoz.messaging.propagate-trace` | `boolean` | `true` | Inject/extract `traceparent` in Kafka record headers. |
 
 ---
 

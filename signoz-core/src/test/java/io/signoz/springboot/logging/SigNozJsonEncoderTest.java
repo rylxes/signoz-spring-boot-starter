@@ -19,6 +19,9 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 
 class SigNozJsonEncoderTest {
 
+    /** Value planted in a sensitive position; it must never appear in masked output. */
+    private static final String CANARY = "s3cret";
+
     private SigNozJsonEncoder encoder;
     private LoggerContext loggerContext;
 
@@ -31,7 +34,7 @@ class SigNozJsonEncoderTest {
 
     @Disabled("logstash-logback-encoder 7.4 calls ILoggingEvent.getInstant() (added in Logback 1.3+);" +
               " signoz-core test classpath has Logback 1.2.13 to match Spring Boot 2.x. " +
-              "Full encode() coverage is provided by signoz-spring-boot3 tests (Logback 1.4.x).")
+              "Full encode() coverage is in SigNozJsonEncoderEscapedJsonMaskingTest in signoz-spring-boot2/3.")
     @Test
     void encodeWithNullRegistryProducesNonNullBytes() {
         encoder.start();
@@ -49,9 +52,9 @@ class SigNozJsonEncoderTest {
         encoder.setMaskingRegistry(registry);
         encoder.start();
 
-        byte[] bytes = encoder.encode(fakeEvent("login with password=supersecret done"));
+        byte[] bytes = encoder.encode(fakeEvent("login with password=" + CANARY + " done"));
         String output = new String(bytes);
-        assertThat(output).doesNotContain("supersecret");
+        assertThat(output).doesNotContain(CANARY);
         encoder.stop();
     }
 

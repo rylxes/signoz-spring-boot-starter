@@ -87,9 +87,7 @@ public class TracingGrpcServerInterceptor implements ServerInterceptor {
         if (parsed == null) {
             return false;
         }
-        MDC.put("traceId", parsed.traceId);
-        MDC.put("spanId", parsed.spanId);
-        MDC.put("traceFlags", parsed.traceFlags);
+        TraceContextCodec.putMdc(parsed);
 
         String requestId = headers.get(TracingGrpcClientInterceptor.REQUEST_ID_KEY);
         MDC.put("requestId", (requestId != null && !requestId.isEmpty()) ? requestId : parsed.traceId);
@@ -100,9 +98,7 @@ public class TracingGrpcServerInterceptor implements ServerInterceptor {
     }
 
     private static void clearMdc() {
-        MDC.remove("traceId");
-        MDC.remove("spanId");
-        MDC.remove("traceFlags");
+        TraceContextCodec.clearMdc();
         MDC.remove("requestId");
     }
 }

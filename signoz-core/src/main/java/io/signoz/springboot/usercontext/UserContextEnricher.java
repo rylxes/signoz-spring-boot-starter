@@ -7,6 +7,8 @@ import org.slf4j.MDC;
 
 import java.lang.reflect.Method;
 import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Extracts user identity information from Spring Security's {@code SecurityContextHolder}
@@ -26,9 +28,9 @@ public class UserContextEnricher {
 
     private static final Logger log = LoggerFactory.getLogger(UserContextEnricher.class);
 
-    private static final String MDC_USER_ID = "userId";
-    private static final String MDC_USER_EMAIL = "userEmail";
-    private static final String MDC_USER_ROLES = "userRoles";
+    public static final String MDC_USER_ID = "userId";
+    public static final String MDC_USER_EMAIL = "userEmail";
+    public static final String MDC_USER_ROLES = "userRoles";
 
     private final SigNozUserContextProperties properties;
 
@@ -57,51 +59,67 @@ public class UserContextEnricher {
             if (context == null) {
                 return;
             }
-
             Object authentication = context.getClass()
                     .getMethod("getAuthentication").invoke(context);
-            if (authentication == null) {
-                return;
+            for (Map.Entry<String, String> e : extract(authentication).entrySet()) {
+                MDC.put(e.getKey(), e.getValue());
             }
-
-            // Check if authenticated (not anonymous)
-            Object isAuthenticated = authentication.getClass()
-                    .getMethod("isAuthenticated").invoke(authentication);
-            if (!Boolean.TRUE.equals(isAuthenticated)) {
-                return;
-            }
-
-            // Extract userId (principal name)
-            Object principal = authentication.getClass()
-                    .getMethod("getPrincipal").invoke(authentication);
-            if (principal != null) {
-                String userId = extractPrincipalField(principal);
-                if (userId != null) {
-                    MDC.put(MDC_USER_ID, userId);
-                }
-
-                // Extract email if enabled
-                if (properties.isExtractEmail()) {
-                    String email = extractEmail(principal);
-                    if (email != null) {
-                        MDC.put(MDC_USER_EMAIL, email);
-                    }
-                }
-            }
-
-            // Extract roles if enabled
-            if (properties.isExtractRoles()) {
-                String roles = extractRoles(authentication);
-                if (roles != null && !roles.isEmpty()) {
-                    MDC.put(MDC_USER_ROLES, roles);
-                }
-            }
-
         } catch (ClassNotFoundException e) {
             log.debug("[SigNoz] Spring Security not on classpath, skipping user context enrichment");
         } catch (Exception e) {
             log.debug("[SigNoz] Could not extract user context: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Extracts the user context MDC entries ({@code userId}, and optionally
+     * {@code userEmail} and {@code userRoles}) from a Spring Security
+     * {@code Authentication}. Returns an empty map when enrichment is disabled or
+     * {@code authentication} is {@code null}, unauthenticated or unreadable.
+     *
+     * <p>Used directly by the reactive filter, which obtains the authentication from
+     * {@code ReactiveSecurityContextHolder} instead of the thread-local holder.
+     *
+     * @param authentication a {@code org.springframework.security.core.Authentication}, or {@code null}
+     * @return the MDC entries to add, never {@code null}
+     */
+    public Map<String, String> extract(Object authentication) {
+        Map<String, String> entries = new LinkedHashMap<String, String>();
+        if (!properties.isEnabled() || authentication == null) {
+            return entries;
+        }
+        try {
+            Object isAuthenticated = authentication.getClass()
+                    .getMethod("isAuthenticated").invoke(authentication);
+            if (!Boolean.TRUE.equals(isAuthenticated)) {
+                return entries;
+            }
+
+            Object principal = authentication.getClass()
+                    .getMethod("getPrincipal").invoke(authentication);
+            if (principal != null) {
+                String userId = extractPrincipalField(principal);
+                if (userId != null) {
+                    entries.put(MDC_USER_ID, userId);
+                }
+                if (properties.isExtractEmail()) {
+                    String email = extractEmail(principal);
+                    if (email != null) {
+                        entries.put(MDC_USER_EMAIL, email);
+                    }
+                }
+            }
+
+            if (properties.isExtractRoles()) {
+                String roles = extractRoles(authentication);
+                if (roles != null && !roles.isEmpty()) {
+                    entries.put(MDC_USER_ROLES, roles);
+                }
+            }
+        } catch (Exception e) {
+            log.debug("[SigNoz] Could not extract user context: {}", e.getMessage());
+        }
+        return entries;
     }
 
     /**

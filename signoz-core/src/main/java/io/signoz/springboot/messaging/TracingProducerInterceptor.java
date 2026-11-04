@@ -1,7 +1,6 @@
 package io.signoz.springboot.messaging;
 
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.SpanContext;
+import io.signoz.springboot.tracing.TraceContextCodec;
 import org.apache.kafka.clients.producer.ProducerInterceptor;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
@@ -20,28 +19,31 @@ import java.util.Map;
  */
 public class TracingProducerInterceptor implements ProducerInterceptor<Object, Object> {
 
+    /** Legacy record headers, written alongside {@code traceparent} for older consumers. */
+    public static final String LEGACY_TRACE_ID_HEADER = "traceId";
+    public static final String LEGACY_SPAN_ID_HEADER = "spanId";
+
     private static final Logger logger = LoggerFactory.getLogger("SIGNOZ_MESSAGING");
 
     /**
-     * Injects the current span's trace context into the record headers before sending.
+     * Injects the current trace context (active OTel span, else the agentless MDC
+     * written by the HTTP filters) into the record headers before sending.
      *
      * @param record the record about to be sent
      * @return the record with injected trace headers
      */
     @Override
     public ProducerRecord<Object, Object> onSend(ProducerRecord<Object, Object> record) {
-        SpanContext spanContext = Span.current().getSpanContext();
-        if (spanContext.isValid()) {
-            String traceId = spanContext.getTraceId();
-            String spanId = spanContext.getSpanId();
-            String traceparent = String.format("00-%s-%s-%s",
-                    traceId,
-                    spanId,
-                    spanContext.getTraceFlags().asHex());
-
-            record.headers().add("traceId", traceId.getBytes(StandardCharsets.UTF_8));
-            record.headers().add("spanId", spanId.getBytes(StandardCharsets.UTF_8));
-            record.headers().add("traceparent", traceparent.getBytes(StandardCharsets.UTF_8));
+        // Active OTel span first, then the MDC written by the HTTP filters, so agentless
+        // producers propagate too (previously only an active span was used).
+        TraceContextCodec.Parsed parsed = TraceContextCodec.parse(TraceContextCodec.currentTraceparent());
+        if (parsed != null) {
+            record.headers().add(TraceContextCodec.TRACEPARENT_HEADER,
+                    TraceContextCodec.format(parsed.traceId, parsed.spanId, parsed.traceFlags)
+                            .getBytes(StandardCharsets.UTF_8));
+            // Legacy headers, kept so consumers on older starter versions still correlate.
+            record.headers().add(LEGACY_TRACE_ID_HEADER, parsed.traceId.getBytes(StandardCharsets.UTF_8));
+            record.headers().add(LEGACY_SPAN_ID_HEADER, parsed.spanId.getBytes(StandardCharsets.UTF_8));
         }
         return record;
     }
