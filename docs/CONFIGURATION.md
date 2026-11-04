@@ -146,7 +146,7 @@ These apply to both servlet (`HttpLoggingFilter`) and WebFlux (`HttpLoggingWebFi
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `signoz.messaging.enabled` | `boolean` | `true` | Enable/disable Kafka trace propagation interceptors. |
-| `signoz.messaging.propagate-trace` | `boolean` | `true` | Inject/extract `traceId` in Kafka record headers. |
+| `signoz.messaging.propagate-trace` | `boolean` | `true` | Inject/extract `traceparent` in Kafka record headers. |
 
 ---
 

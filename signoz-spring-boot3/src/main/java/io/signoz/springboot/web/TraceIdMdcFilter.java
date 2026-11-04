@@ -1,7 +1,7 @@
 package io.signoz.springboot.web;
 
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.SpanContext;
+import io.signoz.springboot.tracing.TraceContextCodec;
+import io.signoz.springboot.tracing.TraceIdentity;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -13,9 +13,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.security.SecureRandom;
-import java.util.UUID;
-import java.util.regex.Pattern;
+import java.util.Map;
 
 /**
  * Servlet filter that populates MDC with trace-correlation IDs for every HTTP
@@ -41,107 +39,30 @@ import java.util.regex.Pattern;
 @Order(Ordered.HIGHEST_PRECEDENCE + 1)
 public class TraceIdMdcFilter extends OncePerRequestFilter {
 
-    /** W3C traceparent: {@code version-traceId-parentSpanId-flags}, all lowercase hex. */
-    private static final Pattern TRACEPARENT =
-            Pattern.compile("^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$");
-
-    private static final SecureRandom RNG = new SecureRandom();
-
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain)
             throws ServletException, IOException {
 
-        String inboundRequestId = trimToNull(request.getHeader("X-Request-ID"));
-        String inboundTraceparent = trimToNull(request.getHeader("traceparent"));
+        // Same resolution as the reactive TraceIdWebFilter, shared via TraceIdentity.
+        TraceIdentity identity = TraceIdentity.resolve(
+                request.getHeader(TraceContextCodec.TRACEPARENT_HEADER),
+                request.getHeader(TraceIdentity.REQUEST_ID_HEADER));
+        Map<String, String> mdc = identity.mdcEntries();
 
-        String traceId;
-        String spanId;
-        String traceFlags;
-
-        Span currentSpan = Span.current();
-        SpanContext ctx = currentSpan != null ? currentSpan.getSpanContext() : null;
-        boolean agentPopulated = ctx != null && ctx.isValid();
-
-        if (agentPopulated) {
-            // OTEL agent already emits trace_id/span_id/trace_flags into MDC;
-            // reuse its identity for the response headers but don't duplicate the MDC keys.
-            traceId = ctx.getTraceId();
-            spanId = ctx.getSpanId();
-            traceFlags = ctx.getTraceFlags().asHex();
-        } else if (inboundTraceparent != null && TRACEPARENT.matcher(inboundTraceparent).matches()) {
-            String[] parts = inboundTraceparent.split("-");
-            traceId = parts[1];
-            spanId = randomHex(16);
-            traceFlags = parts[3];
-        } else if (inboundRequestId != null) {
-            traceId = normalizeToHex(inboundRequestId, 32);
-            spanId = randomHex(16);
-            traceFlags = "01";
-        } else {
-            traceId = UUID.randomUUID().toString().replace("-", "");
-            spanId = randomHex(16);
-            traceFlags = "01";
+        for (Map.Entry<String, String> e : mdc.entrySet()) {
+            MDC.put(e.getKey(), e.getValue());
         }
-
-        String requestId = inboundRequestId != null ? inboundRequestId : traceId;
-
-        MDC.put("requestId", requestId);
-        if (!agentPopulated) {
-            // OpenTelemetry-native snake_case keys, only when no agent owns them,
-            // so logs are consistent and queryable in SigNoz without duplicates.
-            MDC.put("trace_id", traceId);
-            MDC.put("span_id", spanId);
-            MDC.put("trace_flags", traceFlags);
-        }
-
-        response.setHeader("X-Request-ID", requestId);
-        response.setHeader("traceparent", "00-" + traceId + "-" + spanId + "-" + traceFlags);
+        response.setHeader(TraceIdentity.REQUEST_ID_HEADER, identity.getRequestId());
+        response.setHeader(TraceContextCodec.TRACEPARENT_HEADER, identity.toTraceparent());
 
         try {
             filterChain.doFilter(request, response);
         } finally {
-            MDC.remove("requestId");
-            if (!agentPopulated) {
-                MDC.remove("trace_id");
-                MDC.remove("span_id");
-                MDC.remove("trace_flags");
+            for (String key : mdc.keySet()) {
+                MDC.remove(key);
             }
         }
-    }
-
-    private static String trimToNull(String value) {
-        if (value == null) return null;
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
-    }
-
-    private static String randomHex(int chars) {
-        byte[] b = new byte[chars / 2];
-        RNG.nextBytes(b);
-        StringBuilder sb = new StringBuilder(chars);
-        for (byte x : b) sb.append(String.format("%02x", x & 0xff));
-        return sb.toString();
-    }
-
-    /**
-     * Coerce an arbitrary inbound ID to a fixed-length lowercase-hex string so
-     * it can fit a W3C {@code traceparent}. Hex characters are preserved; non-hex
-     * input is hashed deterministically for stable cross-service mapping.
-     */
-    private static String normalizeToHex(String value, int length) {
-        String stripped = value.replaceAll("[^0-9a-fA-F]", "").toLowerCase();
-        if (stripped.length() >= length) {
-            return stripped.substring(0, length);
-        }
-        StringBuilder sb = new StringBuilder(length);
-        sb.append(stripped);
-        int seed = value.hashCode();
-        while (sb.length() < length) {
-            sb.append(String.format("%08x", seed));
-            seed = seed * 31 + 17;
-        }
-        return sb.substring(0, length);
     }
 }
