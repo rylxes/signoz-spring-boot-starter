@@ -1,6 +1,7 @@
 package io.signoz.springboot.outbound;
 
 import io.opentelemetry.api.trace.Span;
+import io.signoz.springboot.masking.MaskingRegistry;
 import io.signoz.springboot.properties.SigNozOutboundProperties;
 import io.signoz.springboot.tracing.TraceContextCodec;
 import io.signoz.springboot.tracing.TraceIdentity;
@@ -23,20 +24,36 @@ import java.util.Map;
  *
  * <p>Header propagation uses the format:
  * {@code 00-{traceId}-{spanId}-{traceFlags}}.
+ *
+ * <p>The logged URL has its sensitive query parameters masked and any user info removed (see
+ * {@link OutboundUrl}), so {@code ?access_token=abc} does not reach the log in clear.
  */
 public class TracingWebClientFilter implements ExchangeFilterFunction {
 
     private static final Logger logger = LoggerFactory.getLogger("SIGNOZ_OUTBOUND");
 
     private final SigNozOutboundProperties properties;
+    private final MaskingRegistry maskingRegistry;
 
     /**
-     * Creates a new filter.
+     * Creates a new filter that removes user info from logged URLs but does not mask their query
+     * strings. Prefer {@link #TracingWebClientFilter(SigNozOutboundProperties, MaskingRegistry)}.
      *
      * @param properties outbound tracing configuration
      */
     public TracingWebClientFilter(SigNozOutboundProperties properties) {
+        this(properties, null);
+    }
+
+    /**
+     * Creates a new filter.
+     *
+     * @param properties      outbound tracing configuration
+     * @param maskingRegistry masks sensitive query parameters in logged URLs; may be {@code null}
+     */
+    public TracingWebClientFilter(SigNozOutboundProperties properties, MaskingRegistry maskingRegistry) {
         this.properties = properties;
+        this.maskingRegistry = maskingRegistry;
     }
 
     @Override
@@ -71,7 +88,7 @@ public class TracingWebClientFilter implements ExchangeFilterFunction {
                             long duration = System.currentTimeMillis() - start;
                             logger.info("[SigNoz] Outbound {} {} -> {} in {}ms",
                                     modifiedRequest.method(),
-                                    modifiedRequest.url(),
+                                    OutboundUrl.forLog(modifiedRequest.url(), maskingRegistry),
                                     response.rawStatusCode(),
                                     duration);
                         }
@@ -79,11 +96,12 @@ public class TracingWebClientFilter implements ExchangeFilterFunction {
                     .doOnError(ex -> {
                         if (properties.isLogRequests()) {
                             long duration = System.currentTimeMillis() - start;
+                            String url = OutboundUrl.forLog(modifiedRequest.url(), maskingRegistry);
                             logger.warn("[SigNoz] Outbound {} {} -> FAILED in {}ms: {}",
                                     modifiedRequest.method(),
-                                    modifiedRequest.url(),
+                                    url,
                                     duration,
-                                    ex.getMessage());
+                                    OutboundUrl.maskMessage(ex.getMessage(), modifiedRequest.url(), url));
                         }
                     });
         });
