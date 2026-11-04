@@ -27,6 +27,13 @@ public class TracingRestTemplateInterceptor implements ClientHttpRequestIntercep
 
     private static final Logger logger = LoggerFactory.getLogger("SIGNOZ_OUTBOUND");
 
+    /**
+     * Status reader that works on Spring 5, 6 and 7: {@code getRawStatusCode()} was removed in
+     * Spring 7.0. See {@link ResponseStatusReader}.
+     */
+    private static final ResponseStatusReader STATUS =
+            new ResponseStatusReader(ClientHttpResponse.class, "getRawStatusCode", "getStatusCode");
+
     private final SigNozOutboundProperties properties;
     private final MaskingRegistry maskingRegistry;
 
@@ -77,7 +84,7 @@ public class TracingRestTemplateInterceptor implements ClientHttpRequestIntercep
                 logger.info("[SigNoz] Outbound {} {} -> {} in {}ms",
                         request.getMethod(),
                         OutboundUriRenderer.render(request.getURI(), maskingRegistry),
-                        response.getRawStatusCode(),
+                        STATUS.read(response),
                         duration);
             }
             return response;

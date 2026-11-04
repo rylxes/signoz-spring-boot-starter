@@ -21,6 +21,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.mock.http.client.MockClientHttpResponse;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.reactive.function.client.ClientRequest;
 import org.springframework.web.reactive.function.client.ClientResponse;
@@ -72,7 +73,8 @@ class SigNozOutboundAutoConfigurationTest {
                 .run(ctx -> {
                     callThroughRestTemplateInterceptor(ctx.getBean(RestTemplateCustomizer.class));
 
-                    assertThat(lastLine()).contains("?tenant=***&").doesNotContain("acme");
+                    assertThat(lastLine()).contains("?tenant=***&").contains(" -> 200 in ")
+                            .doesNotContain("acme");
                 });
     }
 
@@ -124,7 +126,10 @@ class SigNozOutboundAutoConfigurationTest {
         when(request.getURI()).thenReturn(URI.create(URL));
         when(request.getHeaders()).thenReturn(new HttpHeaders());
         ClientHttpRequestExecution execution = mock(ClientHttpRequestExecution.class);
-        when(execution.execute(any(), any(byte[].class))).thenReturn(mock(ClientHttpResponse.class));
+        // A real response rather than a mock, so a status method missing from this Spring
+        // version fails here instead of being stubbed away.
+        ClientHttpResponse response = new MockClientHttpResponse(new byte[0], HttpStatus.OK);
+        when(execution.execute(any(), any(byte[].class))).thenReturn(response);
 
         interceptor.intercept(request, new byte[0], execution);
     }

@@ -15,7 +15,6 @@ import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 import org.springframework.web.reactive.function.client.ExchangeFunction;
 import reactor.core.publisher.Mono;
 
-import java.lang.reflect.Method;
 import java.util.Map;
 
 /**
@@ -32,27 +31,9 @@ public class TracingWebClientFilter implements ExchangeFilterFunction {
 
     private static final Logger logger = LoggerFactory.getLogger("SIGNOZ_OUTBOUND");
 
-    /**
-     * {@code ClientResponse.statusCode()} returns {@code HttpStatus} on Spring 5 and
-     * {@code HttpStatusCode} on Spring 6, so a direct call compiled against one is a
-     * {@link NoSuchMethodError} on the other, and {@code rawStatusCode()} is gone from
-     * Spring 6.1. Both return types expose a public {@code value()}, so resolve the pair once.
-     */
-    private static final Method STATUS_CODE;
-    private static final Method STATUS_VALUE;
-
-    static {
-        Method statusCode = null;
-        Method statusValue = null;
-        try {
-            statusCode = ClientResponse.class.getMethod("statusCode");
-            statusValue = statusCode.getReturnType().getMethod("value");
-        } catch (NoSuchMethodException | RuntimeException ignored) {
-            // Status is logged as -1 rather than failing the exchange.
-        }
-        STATUS_CODE = statusCode;
-        STATUS_VALUE = statusValue;
-    }
+    /** Status reader that works on Spring 5, 6 and 7; see {@link ResponseStatusReader}. */
+    private static final ResponseStatusReader STATUS =
+            new ResponseStatusReader(ClientResponse.class, "rawStatusCode", "statusCode");
 
     private final SigNozOutboundProperties properties;
     private final MaskingRegistry maskingRegistry;
@@ -111,7 +92,7 @@ public class TracingWebClientFilter implements ExchangeFilterFunction {
                             logger.info("[SigNoz] Outbound {} {} -> {} in {}ms",
                                     modifiedRequest.method(),
                                     OutboundUriRenderer.render(modifiedRequest.url(), maskingRegistry),
-                                    statusCode(response),
+                                    STATUS.read(response),
                                     duration);
                         }
                     })
@@ -126,21 +107,6 @@ public class TracingWebClientFilter implements ExchangeFilterFunction {
                         }
                     });
         });
-    }
-
-    /**
-     * Returns the response's HTTP status code on both Spring 5 and Spring 6, or {@code -1} when
-     * it cannot be read. Never throws, so logging cannot fail the exchange.
-     */
-    static int statusCode(ClientResponse response) {
-        if (STATUS_CODE == null || STATUS_VALUE == null) {
-            return -1;
-        }
-        try {
-            return (Integer) STATUS_VALUE.invoke(STATUS_CODE.invoke(response));
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            return -1;
-        }
     }
 
     /**

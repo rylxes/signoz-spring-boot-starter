@@ -82,6 +82,12 @@
   default), every successful `WebClient` call failed with `NoSuchMethodError:
   ClientResponse.rawStatusCode()`, which Spring Framework 6.1 removed. The status is
   now read in a way that works on Spring 5 and 6.
+- **RestTemplate on Spring Framework 7 (Spring Boot 4):** the outbound interceptor
+  called `ClientHttpResponse.getRawStatusCode()`, which Spring 7.0 removed, so with
+  outbound logging on every `RestTemplate` call would fail with `NoSuchMethodError`.
+  It is still present (deprecated for removal) in Spring 6.2. Both outbound clients
+  now read the status in a way that works on Spring 5, 6 and 7, and logging the
+  status can no longer fail the call.
 - **Startup crash without Micrometer:** an application without Actuator or
   `micrometer-core` failed to start with `ClassNotFoundException: MeterRegistry`.
   `@Timed` and `@AlertOnFailure` now log without it, as documented; metrics are
