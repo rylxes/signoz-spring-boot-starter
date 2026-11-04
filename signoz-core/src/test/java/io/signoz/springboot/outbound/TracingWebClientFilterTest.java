@@ -76,6 +76,7 @@ class TracingWebClientFilterTest {
         assertThat(appender.list.get(0).getFormattedMessage())
                 .contains("Outbound GET https://api.example.com:8443/x?tenant=acme&token=***&")
                 .contains("access%5Ftoken=***")
+                .contains(" -> 200 in ")
                 .doesNotContain("q-canary", "a-canary", "tail-canary", "k-canary", "u-canary");
         // The request itself still goes out with the original URL.
         assertThat(sent.get().url()).isEqualTo(URI.create(SENSITIVE_URL));

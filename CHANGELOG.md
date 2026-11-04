@@ -78,6 +78,10 @@
   own. Sensitive query parameters are now masked with the same rules as inbound
   query strings, including percent-encoded names (`access%5Ftoken`) and values
   containing commas. URL credentials (`user:password@`) are no longer logged.
+- **WebClient on Spring Boot 3.2+:** with `signoz.outbound.log-requests` on (the
+  default), every successful `WebClient` call failed with `NoSuchMethodError:
+  ClientResponse.rawStatusCode()`, which Spring Framework 6.1 removed. The status is
+  now read in a way that works on Spring 5 and 6.
 - **Startup crash without Micrometer:** an application without Actuator or
   `micrometer-core` failed to start with `ClassNotFoundException: MeterRegistry`.
   `@Timed` and `@AlertOnFailure` now log without it, as documented; metrics are

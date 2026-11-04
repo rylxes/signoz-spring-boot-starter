@@ -92,7 +92,9 @@ class SigNozOutboundAutoConfigurationTest {
                 .run(ctx -> {
                     callThroughWebClient((WebClientCustomizer) ctx.getBean("sigNozWebClientCustomizer"));
 
-                    assertThat(lastLine()).contains("?tenant=***&").doesNotContain("acme");
+                    // The status is read in a way that works on Spring 5 and 6.
+                    assertThat(lastLine()).contains("?tenant=***&").contains(" -> 200 in ")
+                            .doesNotContain("acme");
                 });
     }
 
