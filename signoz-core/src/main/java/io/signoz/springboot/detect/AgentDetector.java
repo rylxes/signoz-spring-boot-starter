@@ -89,6 +89,21 @@ public final class AgentDetector {
         return !"none".equalsIgnoreCase(setting("otel.logs.exporter", "OTEL_LOGS_EXPORTER"));
     }
 
+    /**
+     * Log4j2 counterpart of {@link #isAgentHandlingLogs()}: true while the agent is present, its
+     * Log4j2 appender instrumentation is not disabled, and its log exporter is not {@code none}.
+     */
+    public static boolean isAgentHandlingLog4j2Logs() {
+        if (!isAgentPresent()) {
+            return false;
+        }
+        if (isDisabled("otel.instrumentation.log4j-appender.enabled",
+                "OTEL_INSTRUMENTATION_LOG4J_APPENDER_ENABLED")) {
+            return false;
+        }
+        return !"none".equalsIgnoreCase(setting("otel.logs.exporter", "OTEL_LOGS_EXPORTER"));
+    }
+
     /** True when the setting is explicitly present and false-y. Absent means "agent default: on". */
     private static boolean isDisabled(String systemProperty, String envVar) {
         String value = setting(systemProperty, envVar);

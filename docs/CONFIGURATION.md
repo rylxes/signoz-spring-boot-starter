@@ -39,6 +39,8 @@ remain active.
 
 ## Logging properties (`signoz.logging.*`)
 
+These apply to whichever backend is active, Logback or Log4j2 (see the README's *Logging Backend Support*).
+
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `signoz.logging.mode` | `OTLP` \| `JSON` \| `BOTH` | `BOTH` | Output mode. `OTLP` sends logs to SigNoz via gRPC. `JSON` writes structured JSON to stdout. `BOTH` does both simultaneously. |

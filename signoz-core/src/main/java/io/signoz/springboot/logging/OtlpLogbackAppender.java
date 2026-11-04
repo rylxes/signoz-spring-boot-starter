@@ -8,11 +8,7 @@ import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.logs.LogRecordBuilder;
 import io.opentelemetry.api.logs.Severity;
-import io.opentelemetry.exporter.otlp.logs.OtlpGrpcLogRecordExporter;
 import io.opentelemetry.sdk.logs.SdkLoggerProvider;
-import io.opentelemetry.sdk.logs.export.BatchLogRecordProcessor;
-import io.opentelemetry.sdk.resources.Resource;
-import io.opentelemetry.semconv.ResourceAttributes;
 import io.signoz.springboot.masking.MaskingRegistry;
 
 import java.util.HashMap;
@@ -64,29 +60,8 @@ public class OtlpLogbackAppender extends AppenderBase<ILoggingEvent> {
     @Override
     public void start() {
         try {
-            io.opentelemetry.exporter.otlp.logs.OtlpGrpcLogRecordExporterBuilder exporterBuilder =
-                    OtlpGrpcLogRecordExporter.builder()
-                            .setEndpoint(endpoint)
-                            .setTimeout(exportTimeoutMs, TimeUnit.MILLISECONDS);
-            if (headers != null) {
-                for (Map.Entry<String, String> entry : headers.entrySet()) {
-                    exporterBuilder.addHeader(entry.getKey(), entry.getValue());
-                }
-            }
-            OtlpGrpcLogRecordExporter exporter = exporterBuilder.build();
-
-            Resource resource = Resource.getDefault().merge(
-                    Resource.create(Attributes.of(
-                            ResourceAttributes.SERVICE_NAME, serviceName,
-                            ResourceAttributes.SERVICE_VERSION, serviceVersion,
-                            AttributeKey.stringKey("deployment.environment"), environment
-                    )));
-
-            this.loggerProvider = SdkLoggerProvider.builder()
-                    .setResource(resource)
-                    .addLogRecordProcessor(
-                            BatchLogRecordProcessor.builder(exporter).build())
-                    .build();
+            this.loggerProvider = OtlpLogSupport.createLoggerProvider(
+                    endpoint, headers, exportTimeoutMs, serviceName, serviceVersion, environment);
 
             this.otelLogger = loggerProvider.get(serviceName);
             if (maskingRegistry == null) {
@@ -164,28 +139,11 @@ public class OtlpLogbackAppender extends AppenderBase<ILoggingEvent> {
      * degrades to plain {@code maskMessage} behaviour on free-form text.
      */
     private String maskBody(String formattedMessage) {
-        if (maskingRegistry == null) {
-            return formattedMessage;
-        }
-        try {
-            return maskingRegistry.maskJsonString(formattedMessage);
-        } catch (Exception e) {
-            // Fail closed: emitting the raw body here is the failure this method exists to prevent.
-            addError("[SigNoz] Masking failed; withholding log body", e);
-            return "[signoz:masking-failed:body-withheld]";
-        }
+        return OtlpLogSupport.maskBody(maskingRegistry, formattedMessage, this::addError);
     }
 
     private String maskField(String key, String value) {
-        if (maskingRegistry == null) {
-            return value;
-        }
-        try {
-            return maskingRegistry.mask(key, value);
-        } catch (Exception e) {
-            addError("[SigNoz] Masking failed for MDC key " + key, e);
-            return "[signoz:masking-failed]";
-        }
+        return OtlpLogSupport.maskField(maskingRegistry, key, value, this::addError);
     }
 
     // --- Level mapping ---
