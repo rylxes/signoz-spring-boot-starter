@@ -120,6 +120,11 @@
   `micrometer-core` failed to start with `ClassNotFoundException: MeterRegistry`.
   `@Timed` and `@AlertOnFailure` now log without it, as documented; metrics are
   still recorded when a `MeterRegistry` bean exists.
+- **Spring Boot 2 applications built with Gradle failed to start.** The Spring Boot 2
+  starter needs `logstash-logback-encoder` 7.3, the last version that works with Logback 1.2,
+  but `signoz-core` asked for 7.4. Maven picked 7.3; Gradle picks the highest version, 7.4,
+  which calls a Logback 1.3 method, so the first JSON log line threw `NoSuchMethodError` and
+  startup failed. Every module now uses 7.3, which works with Logback 1.2 to 1.4.
 - **WebClient calls were often not traced.** The starter's `WebClientCustomizer` bean was
   declared with return type `Object`, so Spring Boot only found it if it already existed when
   a `WebClient.Builder` was created. A builder injected into an application bean (the usual

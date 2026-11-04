@@ -40,13 +40,6 @@
             <artifactId>signoz-core</artifactId>
         </dependency>
 
-        <!-- Boot 2 / Logback 1.2 needs logstash-logback-encoder 7.3. -->
-        <dependency>
-            <groupId>net.logstash.logback</groupId>
-            <artifactId>logstash-logback-encoder</artifactId>
-            <version>7.3</version>
-        </dependency>
-
         <!-- Spring Boot 2.x auto-configuration + web filters -->
         <dependency>
             <groupId>io.github.rylxes</groupId>
