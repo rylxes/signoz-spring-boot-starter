@@ -120,6 +120,42 @@
   `micrometer-core` failed to start with `ClassNotFoundException: MeterRegistry`.
   `@Timed` and `@AlertOnFailure` now log without it, as documented; metrics are
   still recorded when a `MeterRegistry` bean exists.
+- **WebClient calls were often not traced.** The starter's `WebClientCustomizer` bean was
+  declared with return type `Object`, so Spring Boot only found it if it already existed when
+  a `WebClient.Builder` was created. A builder injected into an application bean (the usual
+  case) missed it: those calls carried no `traceparent` or `X-Request-ID` and were not logged.
+  Affects Spring MVC and WebFlux applications alike.
+- **User context on Spring MVC never appeared.** The servlet `UserContextMdcFilter` ran before
+  Spring Security's filter chain, so it always found the request unauthenticated and added no
+  `userId`, `userEmail` or `userRoles`. It now runs after the chain (order 0), as the WebFlux
+  filter already did.
+- **`userId` for Spring Security's `User` principal was its `toString()`**, a description
+  including the account's authorities, because `User` has neither `getEmail()` nor `getName()`.
+  When the configured `signoz.user-context.principal-field` is not available, `userId` is now
+  `Authentication.getName()`: the username, or the name of an OAuth2 or `Principal` principal.
+- **STOMP `@MessageMapping` handlers had no trace in their logs.** Spring's client-inbound
+  channel runs handlers on its own executor, but the MDC was set on the thread that sent the
+  frame into the channel. It is now also set on the handler's thread, from the frame's
+  `traceparent` or the one captured at the handshake.
+- **STOMP frames from the broker were dropped while a trace was active.** To add
+  `traceparent`, the outbound interceptor re-wrapped each server-to-client message as a STOMP
+  message. Spring only converts broker messages (the CONNECTED reply, MESSAGE frames to
+  subscribers) when they are not already STOMP messages, so with a trace in the MDC it failed
+  with "Missing STOMP command", dropped the frame and closed the session. A
+  `SimpMessagingTemplate.convertAndSend(...)` from an HTTP request, which has the request's
+  trace, lost every subscriber's frame. The header is now added without changing the message's
+  type.
+- **The `pci` profile and `field-strategies` did not apply inside JSON bodies.** The free-text
+  card-number pattern ran first, so a PAN under `cardPan` became `[card-number-redacted]` and
+  the field's partial mask was applied to that placeholder (`[card-************ted]`) instead of
+  keeping the BIN and last four. Field rules now run before the free-text patterns.
+- **Startup warnings in applications with a `DataSource`.** Spring Boot 3.2 logged that
+  `SigNozDatabaseAutoConfiguration` and `SigNozDatabaseProperties` were "not eligible for getting
+  processed by all BeanPostProcessors". The slow-query post-processor is now declared so that
+  nothing is created early.
+- **`@SigNozLog` compiler warning:** builds at Java 11 and later warned "Supported source version
+  'RELEASE_8' from annotation processor ... less than -source". The processor now supports the
+  running compiler's version.
 
 ### Internal
 
@@ -134,6 +170,10 @@
   event encodes about 30% faster. (#13)
 - Masking tests build planted secrets at runtime so secret scanners don't flag
   them. (#10, #11, #12, #15, #16)
+- End-to-end tests (`mvn verify -Pe2e`, see `signoz-e2e/README.md`): two services calling
+  each other over HTTP, Kafka, SQS, gRPC and STOMP check every feature alone and together, on
+  Spring Boot 2 and 3, Spring MVC and WebFlux, Logback and Log4j2, with and without the
+  OpenTelemetry Java agent, against each exporter backend. They found the problems fixed above.
 - Documentation reorganised: the README is now a short landing page, with task-focused
   guides under `docs/` (exporting, logging, tracing, web, metrics, annotations,
   customizing). `CONTRIBUTING.md` (for people) and `AGENTS.md` (for AI coding agents)

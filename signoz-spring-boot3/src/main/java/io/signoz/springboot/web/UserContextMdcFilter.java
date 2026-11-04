@@ -5,7 +5,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -17,14 +16,19 @@ import java.io.IOException;
  *
  * <p>Spring Boot 3.x / {@code jakarta.servlet} version.
  *
- * <p>Runs at {@code HIGHEST_PRECEDENCE + 2}, immediately after the
- * {@code TraceIdMdcFilter} (which runs at {@code HIGHEST_PRECEDENCE + 1}),
- * so that trace IDs are already in the MDC when user context is added.
+ * <p>Runs at order {@value #ORDER}, after Spring Security's filter chain (order -100 by
+ * default), because that chain is what authenticates the request and fills the
+ * {@code SecurityContext}: HTTP Basic, bearer tokens and form logins alike. Running earlier, as
+ * this filter once did, it always found an unauthenticated context and added nothing. It also
+ * runs after {@code TraceIdMdcFilter}, so trace IDs are already in the MDC.
  *
  * @see io.signoz.springboot.usercontext.UserContextEnricher
  */
-@Order(Ordered.HIGHEST_PRECEDENCE + 2)
+@Order(UserContextMdcFilter.ORDER)
 public class UserContextMdcFilter extends OncePerRequestFilter {
+
+    /** After Spring Security's filter chain ({@code SecurityProperties.DEFAULT_FILTER_ORDER}, -100). */
+    public static final int ORDER = 0;
 
     private final UserContextEnricher enricher;
 

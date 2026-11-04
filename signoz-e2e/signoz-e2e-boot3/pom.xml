@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.rylxes</groupId>
+        <artifactId>signoz-e2e</artifactId>
+        <version>1.1.0</version>
+    </parent>
+
+    <artifactId>signoz-e2e-boot3</artifactId>
+    <name>SigNoz E2E Tests - Spring Boot 3</name>
+    <description>The e2e demo services and scenarios on Spring Boot 3, using signoz-spring-boot3-starter.</description>
+
+    <properties>
+        <java.version>17</java.version>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <e2e.boot>3</e2e.boot>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>2.0.12</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot3.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- What an application adds: the starter. -->
+        <dependency>
+            <groupId>io.github.rylxes</groupId>
+            <artifactId>signoz-spring-boot3-starter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- The demo services' own stack. -->
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-webflux</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-websocket</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-security</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-actuator</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-jdbc</artifactId></dependency>
+        <dependency><groupId>com.h2database</groupId><artifactId>h2</artifactId></dependency>
+        <dependency><groupId>org.springframework.kafka</groupId><artifactId>spring-kafka</artifactId></dependency>
+        <dependency><groupId>io.micrometer</groupId><artifactId>micrometer-registry-otlp</artifactId></dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-netty-shaded</artifactId>
+            <version>${e2e.grpc.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-stub</artifactId>
+            <version>${e2e.grpc.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-sqs</artifactId>
+            <version>${e2e.aws-sdk-v1.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.awspring.cloud</groupId>
+            <artifactId>spring-cloud-aws-starter-sqs</artifactId>
+            <version>3.1.1</version>
+        </dependency>
+        <!-- Log4j2 backend: on the classpath file, but the launcher keeps it out of every
+             scenario except the Log4j2 ones (and keeps Logback out of those). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-log4j2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Test harness. -->
+        <dependency>
+            <groupId>io.github.rylxes</groupId>
+            <artifactId>signoz-e2e-support</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <!-- What docs/ANNOTATIONS.md tells users to add for @SigNozLog on JDK 9+. -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>17</source>
+                    <target>17</target>
+                    <parameters>true</parameters>
+                    <fork>true</fork>
+                    <compilerArgs>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>shared-app</id>
+                        <goals><goal>add-source</goal></goals>
+                        <configuration><sources><source>${project.basedir}/../app/src/main/java</source></sources></configuration>
+                    </execution>
+                    <execution>
+                        <id>shared-app-resources</id>
+                        <goals><goal>add-resource</goal></goals>
+                        <configuration><resources><resource><directory>${project.basedir}/../app/src/main/resources</directory></resource></resources></configuration>
+                    </execution>
+                    <execution>
+                        <id>shared-scenarios</id>
+                        <goals><goal>add-test-source</goal></goals>
+                        <configuration><sources><source>${project.basedir}/../scenarios/src/test/java</source></sources></configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.6.1</version>
+                <executions>
+                    <execution>
+                        <!-- The demo services' runtime classpath, as an application would have it. -->
+                        <id>app-classpath</id>
+                        <phase>generate-test-resources</phase>
+                        <goals><goal>build-classpath</goal></goals>
+                        <configuration>
+                            <includeScope>runtime</includeScope>
+                            <outputFile>${project.build.directory}/e2e/app.classpath</outputFile>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>otel-agent</id>
+                        <phase>generate-test-resources</phase>
+                        <goals><goal>copy</goal></goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>io.opentelemetry.javaagent</groupId>
+                                    <artifactId>opentelemetry-javaagent</artifactId>
+                                    <version>${e2e.otel-agent.version}</version>
+                                    <destFileName>opentelemetry-javaagent.jar</destFileName>
+                                </artifactItem>
+                            </artifactItems>
+                            <outputDirectory>${project.build.directory}/e2e/agent</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- The Log4j2 jars are for the services' Log4j2 scenarios, not the test JVM,
+                         where they would clash with Logback's log4j-to-slf4j bridge. -->
+                    <classpathDependencyExcludes>
+                        <exclude>org.apache.logging.log4j:log4j-slf4j2-impl</exclude>
+                        <exclude>org.apache.logging.log4j:log4j-core</exclude>
+                        <exclude>org.apache.logging.log4j:log4j-jul</exclude>
+                        <exclude>org.springframework.boot:spring-boot-starter-log4j2</exclude>
+                    </classpathDependencyExcludes>
+                    <systemPropertyVariables>
+                        <e2e.boot>${e2e.boot}</e2e.boot>
+                        <e2e.classes>${project.build.outputDirectory}</e2e.classes>
+                        <e2e.classpath>${project.build.directory}/e2e/app.classpath</e2e.classpath>
+                        <e2e.agent>${project.build.directory}/e2e/agent/opentelemetry-javaagent.jar</e2e.agent>
+                        <e2e.logs>${project.build.directory}/e2e-logs</e2e.logs>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

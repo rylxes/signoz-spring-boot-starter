@@ -28,10 +28,30 @@ public class PaymentService {
 }
 ```
 
-> **Java 9+:** the processor uses internal `jdk.compiler` APIs, and a dependency can't add compiler
-> flags to your build. If your compiler blocks those APIs, add the matching `--add-exports` options
-> to your `maven-compiler-plugin` configuration. Otherwise the processor prints a warning, skips
-> the class, and you declare `log` yourself.
+**On JDK 16 and later** the processor needs four `jdk.compiler` packages exported to it, and a
+dependency can't add compiler flags to your build. Without them it prints "compiler internals
+unavailable", skips the class, and the build fails wherever `log` is used. With Maven, fork the
+compiler and pass the exports to its JVM:
+
+```xml
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-compiler-plugin</artifactId>
+    <configuration>
+        <fork>true</fork>
+        <compilerArgs>
+            <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED</arg>
+            <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED</arg>
+            <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED</arg>
+            <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED</arg>
+        </compilerArgs>
+    </configuration>
+</plugin>
+```
+
+`<fork>` is required: the `-J` options configure the JVM running javac, which only a forked compiler
+has. With other build tools, pass the same four `--add-exports` options to that JVM. If you can't,
+declare the logger yourself (`private static final Logger log = LoggerFactory.getLogger(...)`).
 
 ---
 
