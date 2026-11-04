@@ -77,6 +77,11 @@
   The logged URL now has sensitive query parameters masked the same way as inbound requests,
   user info (`https://user:pass@host`) replaced with `***` and the fragment dropped; the URL
   inside a logged exception message is masked too.
+- **WebClient on Spring Boot 3.2+:** with `signoz.outbound.log-requests` on (the
+  default), every successful `WebClient` call failed with `NoSuchMethodError:
+  ClientResponse.rawStatusCode()`, because Spring Framework 6.1 removed that method. The
+  status is now read in a way that works on Spring 5 and 6, including non-standard codes
+  such as 499; if it can't be read, `-1` is logged and the call is unaffected.
 - **Startup crash without Micrometer:** an application without Actuator or
   `micrometer-core` failed to start with `ClassNotFoundException: MeterRegistry`.
   `@Timed` and `@AlertOnFailure` now log without it, as documented; metrics are
