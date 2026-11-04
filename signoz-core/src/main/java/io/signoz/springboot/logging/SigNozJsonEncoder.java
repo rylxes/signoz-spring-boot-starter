@@ -28,15 +28,17 @@ import java.util.Map;
  *
  * <p>The masking pipeline:
  * <ol>
- *   <li>The formatted message and every MDC value are masked <em>before</em> serialisation, while
- *       they are still raw text. This step is what catches JSON embedded in a message: once
- *       {@code LogstashEncoder} has serialised it, its quotes are escaped ({@code \"password\":\"x\"})
- *       and no {@code "field":"value"} pattern matches it any more.</li>
- *   <li>The parent {@code LogstashEncoder} serialises the masked event to a JSON byte array.</li>
- *   <li>The finished line gets a second pass over everything else (structured arguments, markers,
- *       stack traces). That pass walks the line with a streaming JSON parser and masks each string
- *       value <em>unescaped</em>, one value at a time, rather than running regexes over the raw line
- *       (see {@link #maskSerialisedLine(String, MaskingRegistry)}).</li>
+ *   <li>The parent {@code LogstashEncoder} serialises the event to a JSON line.</li>
+ *   <li>The line is walked with a streaming JSON parser and every value is masked
+ *       <em>unescaped</em>, one value at a time, rather than by running regexes over the raw line
+ *       (see {@link #maskSerialisedLine(String, MaskingRegistry)}). This covers the message, MDC
+ *       values, structured arguments, markers and stack traces in one pass. A configured prefix or
+ *       suffix is masked as free text around the object.</li>
+ *   <li>Only if no JSON object can be found in the line does the encoder fall back to regexes over
+ *       the raw text. It then re-serialises the event with its message and MDC masked first
+ *       ({@link #maskedView(ILoggingEvent, MaskingRegistry)}), because once
+ *       {@code LogstashEncoder} has escaped JSON embedded in a message ({@code \"password\":\"x\"}) no
+ *       {@code "field":"value"} pattern matches it any more.</li>
  * </ol>
  *
  * <p>Masking fails closed: if any step throws, the message is withheld and a minimal record
@@ -83,12 +85,21 @@ public class SigNozJsonEncoder extends LogstashEncoder {
         }
 
         try {
-            byte[] bytes = super.encode(maskedView(event, registry));
+            byte[] bytes = super.encode(event);
             if (bytes == null) {
                 return null;
             }
-            String json = new String(bytes, StandardCharsets.UTF_8);
-            return maskSerialisedLine(json, registry).getBytes(StandardCharsets.UTF_8);
+            String masked = maskSerialisedLine(new String(bytes, StandardCharsets.UTF_8), registry);
+            if (masked == null) {
+                // No JSON object found, so the regexes have to run over the raw line. Re-serialise with
+                // the message and MDC masked first, while their embedded JSON is still unescaped.
+                bytes = super.encode(maskedView(event, registry));
+                if (bytes == null) {
+                    return null;
+                }
+                masked = registry.maskJsonString(new String(bytes, StandardCharsets.UTF_8));
+            }
+            return masked.getBytes(StandardCharsets.UTF_8);
         } catch (Exception e) {
             // Fail closed: a log line that may carry an unmasked secret is worse than a missing one,
             // so keep the fact that something was logged but not what.
@@ -121,22 +132,50 @@ public class SigNozJsonEncoder extends LogstashEncoder {
      *
      * <p>Instead the line is copied token by token. Each string value is masked as plain text, which
      * also lets the {@code "field":"value"} patterns see JSON embedded in a value with its quotes
-     * unescaped. A scalar whose field name is registered as sensitive (for example a structured
-     * argument {@code kv("password", ...)}) is masked with that field's strategy. Field names,
-     * structure and number literals are written back unchanged.
+     * unescaped. A scalar under a field registered as sensitive (for example a structured argument
+     * {@code kv("password", ...)}) is masked with that field's strategy, including every element of
+     * a list or nested object under it. Field names, structure and number literals are written back
+     * unchanged.
      *
-     * <p>If the line is not a single JSON value (a custom prefix, for example), this falls back to
-     * {@code maskJsonString} over the raw text, which is what the encoder did before.
+     * <p>A configured prefix is free text in front of the JSON object. It is masked as free text and
+     * the object after it gets the same per-value pass, so structured values under a sensitive key
+     * (lists, nested objects) are still masked: regexes over the raw line cannot see those.
+     *
+     * @return the masked line, or {@code null} if no JSON object could be found in the line, in
+     *         which case the caller has to mask the raw text instead
      */
     static String maskSerialisedLine(String line, MaskingRegistry registry) throws IOException {
+        String masked = maskJsonObjectAndTail(line, registry);
+        if (masked != null) {
+            return masked;
+        }
+        // A prefix: try each '{' as the start of the object. The first one is the object's own unless
+        // the prefix itself contains a brace, and a wrong candidate fails to parse within a few chars.
+        for (int start = line.indexOf('{', 1); start > 0; start = line.indexOf('{', start + 1)) {
+            masked = maskJsonObjectAndTail(line.substring(start), registry);
+            if (masked != null) {
+                String prefix = line.substring(0, start);
+                return (prefix.trim().isEmpty() ? prefix : registry.maskJsonString(prefix)) + masked;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Masks a JSON object at the very start of {@code line} value by value, plus whatever free text
+     * follows it, or returns {@code null} if {@code line} does not start with a JSON object.
+     */
+    private static String maskJsonObjectAndTail(String line, MaskingRegistry registry) throws IOException {
         StringWriter out = new StringWriter(line.length() + 16);
         int consumed;
         try {
             JsonParser parser = JSON_FACTORY.createParser(line);
             JsonGenerator generator = JSON_FACTORY.createGenerator(out);
             try {
-                if (parser.nextToken() == null) {
-                    return registry.maskJsonString(line);
+                // LogstashEncoder always writes an object. Anything else (a prefix that happens to
+                // start with a number, say) would leave the real object to the free-text tail pass.
+                if (parser.nextToken() != JsonToken.START_OBJECT) {
+                    return null;
                 }
                 copyMasked(parser, generator, registry);
                 generator.flush();
@@ -146,10 +185,10 @@ public class SigNozJsonEncoder extends LogstashEncoder {
                 generator.close();
             }
         } catch (JsonProcessingException notJson) {
-            return registry.maskJsonString(line);
+            return null;
         }
         if (consumed < 0 || consumed > line.length()) {
-            return registry.maskJsonString(line);
+            return null;
         }
         // Whatever follows the JSON value: normally just the line separator, but a configured
         // suffix is free text, so it gets the free-text treatment.
@@ -176,17 +215,17 @@ public class SigNozJsonEncoder extends LogstashEncoder {
                     generator.copyCurrentEvent(parser);
                     break;
                 case VALUE_STRING: {
-                    String field = fieldName(parser);
+                    String field = sensitiveFieldName(parser, registry);
                     String text = parser.getText();
-                    generator.writeString(field != null && registry.isSensitiveField(field)
+                    generator.writeString(field != null
                             ? registry.mask(field, text)
                             : registry.maskJsonString(text));
                     break;
                 }
                 case VALUE_NUMBER_INT:
                 case VALUE_NUMBER_FLOAT: {
-                    String field = fieldName(parser);
-                    if (field != null && registry.isSensitiveField(field)) {
+                    String field = sensitiveFieldName(parser, registry);
+                    if (field != null) {
                         generator.writeString(registry.mask(field, parser.getText()));
                     } else {
                         // The literal text, so the number is not reformatted by a double round trip.
@@ -202,10 +241,26 @@ public class SigNozJsonEncoder extends LogstashEncoder {
         } while (depth > 0 && parser.nextToken() != null);
     }
 
-    /** The field name a value belongs to, or {@code null} for an array element or a root value. */
-    private static String fieldName(JsonParser parser) {
-        JsonStreamContext context = parser.getParsingContext();
-        return context != null && context.inObject() ? context.getCurrentName() : null;
+    /**
+     * The nearest enclosing field name that is registered as sensitive, or {@code null} if there is
+     * none.
+     *
+     * <p>Every enclosing field is checked, not just the value's own: an array element has no field
+     * name of its own, so {@code kv("token", List.of(a, b))}, serialised as {@code "token":[a,b]},
+     * would otherwise be written verbatim, and the same holds for an object nested under a
+     * sensitive key.
+     */
+    private static String sensitiveFieldName(JsonParser parser, MaskingRegistry registry) {
+        for (JsonStreamContext context = parser.getParsingContext();
+                context != null; context = context.getParent()) {
+            if (context.inObject()) {
+                String name = context.getCurrentName();
+                if (name != null && registry.isSensitiveField(name)) {
+                    return name;
+                }
+            }
+        }
+        return null;
     }
 
     // --- Pre-serialisation masking ---
