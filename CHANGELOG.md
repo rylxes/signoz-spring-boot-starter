@@ -62,6 +62,14 @@
   under a sensitive key (for example `kv("token", List.of(a, b))`) in clear, and
   `token=[a, b]` in a message was masked only up to the first comma. With a
   custom prefix, arrays and objects were not masked at all. (#13)
+- **Security:** HTTP request logging wrote the query string unmasked in the servlet
+  and WebFlux filters, so a request such as `?token=abc` put the secret in the
+  logs. `signoz.web.log-query-string` is on by default. Sensitive parameters are now
+  masked using the same field names and strategies as bodies.
+- **Startup crash without Micrometer:** an application without Actuator or
+  `micrometer-core` failed to start with `ClassNotFoundException: MeterRegistry`.
+  `@Timed` and `@AlertOnFailure` now log without it, as documented; metrics are
+  still recorded when a `MeterRegistry` bean exists.
 
 ### Internal
 
