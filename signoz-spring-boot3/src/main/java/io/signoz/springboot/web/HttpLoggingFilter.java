@@ -101,7 +101,7 @@ public class HttpLoggingFilter extends OncePerRequestFilter {
         sb.append("HTTP ").append(request.getMethod()).append(' ').append(request.getRequestURI());
 
         if (webProps.isLogQueryString() && request.getQueryString() != null) {
-            sb.append('?').append(request.getQueryString());
+            sb.append('?').append(maskingRegistry.maskQueryString(request.getQueryString()));
         }
 
         sb.append(" status=").append(response.getStatus());

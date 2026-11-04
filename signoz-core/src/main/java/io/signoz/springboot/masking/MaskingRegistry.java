@@ -3,6 +3,8 @@ package io.signoz.springboot.masking;
 import io.signoz.springboot.properties.SigNozLoggingProperties;
 import org.springframework.stereotype.Component;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -150,6 +152,56 @@ public class MaskingRegistry {
     public void register(String fieldName, MaskingStrategy strategy) {
         if (fieldName != null && strategy != null) {
             fieldStrategies.put(fieldName.toLowerCase(), strategy);
+        }
+    }
+
+    /**
+     * Masks sensitive parameters in a raw URL query string, leaving the others as they arrived.
+     *
+     * <p>The query is split into parameters rather than matched with {@link #maskJsonString}'s
+     * {@code field=value} pattern, which ends a value at characters such as {@code ,} and
+     * {@code ;}. Those are legal unencoded in a query, so the tail of a secret would be logged.
+     * Names are percent-decoded for the lookup; values reach the strategy still encoded, so a
+     * strategy that keeps part of a value cannot write a decoded line break into the log.
+     *
+     * @param rawQuery the raw query string, without the leading {@code ?}
+     * @return the query string with sensitive parameter values masked
+     */
+    public String maskQueryString(String rawQuery) {
+        if (!maskEnabled || rawQuery == null || rawQuery.isEmpty()) {
+            return rawQuery;
+        }
+        String[] parameters = rawQuery.split("&", -1);
+        StringBuilder masked = new StringBuilder(rawQuery.length());
+        for (int i = 0; i < parameters.length; i++) {
+            if (i > 0) {
+                masked.append('&');
+            }
+            masked.append(maskQueryParameter(parameters[i]));
+        }
+        return masked.toString();
+    }
+
+    private String maskQueryParameter(String parameter) {
+        int separator = parameter.indexOf('=');
+        if (separator >= 0) {
+            String rawName = parameter.substring(0, separator);
+            String name = decodeQueryName(rawName);
+            if (isSensitiveField(name)) {
+                return rawName + '=' + mask(name, parameter.substring(separator + 1));
+            }
+        }
+        // Not a sensitive name, but the value can still hold a card number or a
+        // semicolon-separated pair, so the payload patterns apply.
+        return maskJsonString(parameter);
+    }
+
+    private static String decodeQueryName(String rawName) {
+        try {
+            return URLDecoder.decode(rawName, "UTF-8");
+        } catch (UnsupportedEncodingException | IllegalArgumentException e) {
+            // A malformed escape cannot be decoded; compare the name as it arrived.
+            return rawName;
         }
     }
 

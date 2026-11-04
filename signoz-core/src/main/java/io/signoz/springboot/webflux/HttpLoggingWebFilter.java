@@ -136,7 +136,7 @@ public class HttpLoggingWebFilter implements WebFilter, Ordered {
 
         String query = exchange.getRequest().getURI().getRawQuery();
         if (webProps.isLogQueryString() && query != null) {
-            sb.append('?').append(query);
+            sb.append('?').append(maskingRegistry.maskQueryString(query));
         }
 
         ServerHttpResponse response = exchange.getResponse();

@@ -100,4 +100,75 @@ class MaskingRegistryPanAndEscapingTest {
         assertThat(r.maskJsonString(json)).isEqualTo(first);
         assertThat(first).doesNotContain(CANARY);
     }
+
+    // --- URL query strings ---
+
+    @Test
+    @DisplayName("Sensitive query parameters are masked wherever they sit; neighbours survive")
+    void masksQueryStringParameters() {
+        MaskingRegistry registry = registry("token", "secret");
+
+        assertThat(registry.maskQueryString("token=" + CANARY + "&tenant=acme"))
+                .isEqualTo("token=***&tenant=acme");
+        assertThat(registry.maskQueryString("tenant=acme&TOKEN=" + CANARY + "&page=2"))
+                .isEqualTo("tenant=acme&TOKEN=***&page=2");
+        assertThat(registry.maskQueryString("page=2&secret=" + CANARY))
+                .isEqualTo("page=2&secret=***");
+    }
+
+    @Test
+    @DisplayName("The whole value is masked, including characters that end a field=value match")
+    void masksEntireQueryValue() {
+        MaskingRegistry registry = registry("token");
+
+        for (String value : new String[]{"a%2Bb%3D", "a,", "a;", "a)", "a'", "[a]", "a=b"}) {
+            assertThat(registry.maskQueryString("token=" + value + CANARY + "&page=2"))
+                    .isEqualTo("token=***&page=2");
+        }
+    }
+
+    @Test
+    @DisplayName("A percent-encoded parameter name is still recognised")
+    void masksPercentEncodedQueryName() {
+        assertThat(registry("token").maskQueryString("t%6Fken=" + CANARY))
+                .isEqualTo("t%6Fken=***");
+    }
+
+    @Test
+    @DisplayName("A strategy that keeps part of a value still applies")
+    void appliesPartialStrategyToQueryValue() {
+        assertThat(registry().maskQueryString("cardnumber=4111111111111111"))
+                .isEqualTo("cardnumber=************1111");
+    }
+
+    @Test
+    @DisplayName("Secrets in a non-sensitive parameter are caught by the payload patterns")
+    void appliesPayloadPatternsToOtherQueryParameters() {
+        MaskingRegistry registry = registry("token");
+
+        assertThat(registry.maskQueryString("tenant=a;token=" + CANARY)).doesNotContain(CANARY);
+        assertThat(registry.maskQueryString("note=4111111111111111")).doesNotContain("4111111111111111");
+    }
+
+    @Test
+    @DisplayName("Query strings with nothing sensitive are unchanged, even when malformed")
+    void leavesOrdinaryQueryStringsAlone() {
+        MaskingRegistry registry = registry("token");
+
+        for (String query : new String[]{"q=spring%20boot&page=2&flag", "a=%zz", "&&", "=x", "token"}) {
+            assertThat(registry.maskQueryString(query)).isEqualTo(query);
+        }
+        assertThat(registry.maskQueryString("")).isEmpty();
+        assertThat(registry.maskQueryString(null)).isNull();
+    }
+
+    @Test
+    @DisplayName("Nothing is masked when masking is disabled")
+    void leavesQueryAloneWhenMaskingDisabled() {
+        SigNozLoggingProperties props = new SigNozLoggingProperties();
+        props.setMaskEnabled(false);
+
+        assertThat(new MaskingRegistry(props).maskQueryString("token=" + CANARY))
+                .isEqualTo("token=" + CANARY);
+    }
 }

@@ -82,6 +82,19 @@ class HttpLoggingWebFilterTest {
     }
 
     @Test
+    void masksSensitiveQueryParametersAndKeepsOthers() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest
+                .get("/search?tenant=acme&token=q-canary&api_key=k-canary&password=p-canary"));
+
+        filter.filter(exchange, ex -> ex.getResponse().setComplete()).block();
+
+        assertThat(appender.list).hasSize(1);
+        assertThat(appender.list.get(0).getFormattedMessage())
+                .contains("tenant=acme")
+                .doesNotContain("q-canary", "k-canary", "p-canary");
+    }
+
+    @Test
     void boundsCapturedBodiesToMaxBodyBytes() {
         webProps.setMaxBodyBytes(4);
         MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/big"));
