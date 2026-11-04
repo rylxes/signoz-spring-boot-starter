@@ -66,7 +66,8 @@ These apply to whichever backend is active, Logback or Log4j2 (see the README's 
 
 **Default `masked-fields`** (always included unless you override the list):
 `password`, `passwd`, `secret`, `token`, `apikey`, `api_key`, `creditcard`, `cardnumber`,
-`card_number`, `cvv`, `ssn`, `authorization`, `x-api-key`, `x-auth-token`
+`card_number`, `cvv`, `ssn`, `authorization`, `x-api-key`, `x-auth-token`, `access_token`,
+`refresh_token`, `id_token`, `client_secret`
 
 **Built-in message-level patterns** (applied even without configuration):
 - Passwords in log strings: `password=somevalue` → `password=***`
@@ -110,7 +111,7 @@ These apply to both servlet (`HttpLoggingFilter`) and WebFlux (`HttpLoggingWebFi
 | `signoz.web.log-request-body` | `boolean` | `true` | Capture and log the request body for POST/PUT/PATCH requests. |
 | `signoz.web.log-response-body` | `boolean` | `false` | Capture and log the response body. Disable for endpoints returning large payloads. |
 | `signoz.web.log-headers` | `boolean` | `false` | Include request headers in the log entry. Sensitive headers are masked automatically. |
-| `signoz.web.log-query-string` | `boolean` | `true` | Include query string parameters in the logged URI. |
+| `signoz.web.log-query-string` | `boolean` | `true` | Include query string parameters in the logged URI. Sensitive parameters are masked. |
 | `signoz.web.max-body-bytes` | `int` | `4096` | Maximum body size (in bytes) to include in the log entry. Larger bodies are truncated. |
 | `signoz.web.exclude-paths` | `List<String>` | see below | Ant-style path patterns that are excluded from HTTP logging. |
 | `signoz.web.reactive-context-propagation` | `boolean` | `true` | WebFlux on Spring Boot 3 only: register a context-propagation accessor for the SigNoz MDC and enable Reactor's automatic context propagation, so handler logs keep `requestId` and trace IDs after thread hops. When `false`, the MDC is present only up to a handler's first asynchronous boundary. |

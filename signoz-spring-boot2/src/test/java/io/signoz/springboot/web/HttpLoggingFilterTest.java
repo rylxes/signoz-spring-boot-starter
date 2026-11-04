@@ -156,4 +156,17 @@ class HttpLoggingFilterTest {
                 .as("Expected request log to contain the capped request body")
                 .isTrue();
     }
+
+    @Test
+    void sensitiveQueryParametersAreMaskedAndOthersKept() throws Exception {
+        mockMvc.perform(get("/test?tenant=acme&token=q-canary&api_key=k-canary&password=p-canary"))
+                .andExpect(status().isOk());
+
+        assertThat(listAppender.list).isNotEmpty();
+        for (ILoggingEvent event : listAppender.list) {
+            assertThat(event.getFormattedMessage())
+                    .contains("tenant=acme")
+                    .doesNotContain("q-canary", "k-canary", "p-canary");
+        }
+    }
 }
