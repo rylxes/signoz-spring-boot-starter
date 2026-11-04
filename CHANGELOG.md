@@ -158,6 +158,11 @@
   `SigNozDatabaseAutoConfiguration` and `SigNozDatabaseProperties` were "not eligible for getting
   processed by all BeanPostProcessors". The slow-query post-processor is now declared so that
   nothing is created early.
+- **WebFlux handlers behind Spring Security logged without trace IDs** on Spring Boot 2 (and on
+  Spring Boot 3 with `signoz.web.reactive-context-propagation=false`) when
+  `signoz.user-context.enabled=false`. Spring Security's filter chain loads the session on another
+  thread, and only the user-context filter put the IDs back afterwards. A new
+  `MdcRestoringWebFilter`, last in the chain, now restores them before every handler.
 - **`@SigNozLog` compiler warning:** builds at Java 11 and later warned "Supported source version
   'RELEASE_8' from annotation processor ... less than -source". The processor now supports the
   running compiler's version.
