@@ -8,7 +8,6 @@ import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.server.HandshakeInterceptor;
 
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -37,13 +36,13 @@ public class TracingWebSocketHandshakeInterceptor implements HandshakeIntercepto
                                    ServerHttpResponse response,
                                    WebSocketHandler wsHandler,
                                    Map<String, Object> attributes) {
-        String traceparent = firstHeader(request.getHeaders().get(TraceContextCodec.TRACEPARENT_HEADER));
+        String traceparent = firstHeader(request, TraceContextCodec.TRACEPARENT_HEADER);
         TraceContextCodec.Parsed parsed = TraceContextCodec.parse(traceparent);
         if (parsed != null) {
             attributes.put(SESSION_ATTR_TRACEPARENT,
                     TraceContextCodec.format(parsed.traceId, parsed.spanId, parsed.traceFlags));
         }
-        String requestId = firstHeader(request.getHeaders().get("X-Request-ID"));
+        String requestId = firstHeader(request, "X-Request-ID");
         if (requestId != null && !requestId.isEmpty()) {
             attributes.put(SESSION_ATTR_REQUEST_ID, requestId);
         } else if (parsed != null) {
@@ -63,9 +62,13 @@ public class TracingWebSocketHandshakeInterceptor implements HandshakeIntercepto
         // no-op
     }
 
-    private static String firstHeader(List<String> values) {
-        if (values == null || values.isEmpty()) return null;
-        String value = values.get(0);
+    /**
+     * The header's first value, or {@code null} when absent or empty. Uses
+     * {@code HttpHeaders.getFirst(String)}, which has the same signature on Spring 5, 6 and 7;
+     * {@code get(Object)} is gone from Spring 7, where {@code HttpHeaders} is no longer a map.
+     */
+    private static String firstHeader(ServerHttpRequest request, String name) {
+        String value = request.getHeaders().getFirst(name);
         return value == null || value.isEmpty() ? null : value;
     }
 }

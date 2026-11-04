@@ -82,11 +82,13 @@ tests included. The only Boot 3-only class is `SigNozMdcThreadLocalAccessor`.
 **2. Don't call Spring APIs that changed between versions from `signoz-core`.** Code there is
 compiled against Spring 5.3. A method that was removed or changed its return type in Spring 6 or 7
 compiles fine but throws `NoSuchMethodError` at runtime on newer Spring. Examples:
-`ClientResponse.rawStatusCode()` (removed in 6.1), `ClientHttpResponse.getRawStatusCode()`
-(removed in 7.0), and any `getStatusCode()` / `statusCode()` (returns `HttpStatus` on 5,
-`HttpStatusCode` on 6+). Resolve such methods reflectively, once, with a fallback. See
-`ResponseStatusReader` for the pattern. When in doubt, check the method with `javap` against the
-newer Spring jar.
+`ClientResponse.rawStatusCode()` (removed in 6.1), `ClientHttpResponse.getRawStatusCode()` and
+`ServerHttpResponse.getRawStatusCode()` (removed in 7.0), any `getStatusCode()` / `statusCode()`
+(returns `HttpStatus` on 5, `HttpStatusCode` on 6+), and the map methods of `HttpHeaders`
+(`entrySet()`, `get(Object)`, …), which is no longer a map in Spring 7; use `getFirst(String)` or
+`toSingleValueMap()`, which exist on every version. Resolve changed methods reflectively, once,
+with a fallback: `io.signoz.springboot.compat.ResponseStatusReader` does this for response
+statuses. When in doubt, check the method with `javap` against the newer Spring jar.
 
 **3. Keep Java 8 source compatibility** in every module except `signoz-spring-boot3`: no `var`,
 `List.of`, records, text blocks or other post-8 APIs.

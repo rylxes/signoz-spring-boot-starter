@@ -1,5 +1,6 @@
 package io.signoz.springboot.webflux;
 
+import io.signoz.springboot.compat.ResponseStatusReader;
 import io.signoz.springboot.masking.MaskingRegistry;
 import io.signoz.springboot.properties.SigNozWebProperties;
 import io.signoz.springboot.tracing.TraceIdentity;
@@ -27,7 +28,6 @@ import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -48,6 +48,13 @@ import java.util.concurrent.atomic.AtomicReference;
 public class HttpLoggingWebFilter implements WebFilter, Ordered {
 
     private static final Logger log = LoggerFactory.getLogger("SIGNOZ_HTTP");
+
+    /**
+     * Reads the status on Spring 5, 6 and 7: {@code ServerHttpResponse.getRawStatusCode()} was
+     * removed in Spring 7.0. See {@link ResponseStatusReader}.
+     */
+    private static final ResponseStatusReader STATUS =
+            new ResponseStatusReader(ServerHttpResponse.class, "getRawStatusCode", "getStatusCode");
 
     public static final int ORDER = Ordered.HIGHEST_PRECEDENCE + 2;
 
@@ -140,7 +147,7 @@ public class HttpLoggingWebFilter implements WebFilter, Ordered {
         }
 
         ServerHttpResponse response = exchange.getResponse();
-        Integer status = response.getRawStatusCode();
+        Integer status = STATUS.find(response);
         sb.append(" status=").append(status != null ? status : (failure != null ? 500 : 200));
         sb.append(" duration=").append((System.nanoTime() - startNanos) / 1_000_000L).append("ms");
 
@@ -168,8 +175,10 @@ public class HttpLoggingWebFilter implements WebFilter, Ordered {
 
     private Map<String, String> maskedHeaders(HttpHeaders headers) {
         Map<String, String> masked = new LinkedHashMap<String, String>();
-        for (Map.Entry<String, List<String>> e : headers.entrySet()) {
-            String value = e.getValue().isEmpty() ? "" : e.getValue().get(0);
+        // toSingleValueMap() (first value per header) has the same signature on Spring 5, 6 and
+        // 7; entrySet() is gone from Spring 7, where HttpHeaders is no longer a map.
+        for (Map.Entry<String, String> e : headers.toSingleValueMap().entrySet()) {
+            String value = e.getValue() != null ? e.getValue() : "";
             masked.put(e.getKey(), maskingRegistry.mask(e.getKey().toLowerCase(), value));
         }
         return masked;

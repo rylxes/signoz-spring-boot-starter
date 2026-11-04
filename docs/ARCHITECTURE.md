@@ -67,11 +67,11 @@ two separate modules rather than sharing a single compiled artifact.
   WebFlux API has no `javax`/`jakarta` split). The core classes are compiled
   against Spring 5.3 / Reactor 3.4, so they must only call APIs that also exist on
   newer Spring versions. Methods that were removed or retyped must be resolved
-  reflectively; `ResponseStatusReader` does this for the HTTP client response
-  status. One known gap remains: `HttpLoggingWebFilter` calls
-  `ServerHttpResponse.getRawStatusCode()`, which exists through Spring 6.2 but was
-  removed in 7.0. Both modules' integration tests run the core classes against
-  their own Spring version.
+  reflectively or through a member that exists on every version:
+  `io.signoz.springboot.compat.ResponseStatusReader` reads client and server response
+  statuses, and `HttpHeaders` (no longer a map in Spring 7) is read only through
+  `getFirst(String)` and `toSingleValueMap()`. Both modules' integration tests run the
+  core classes against their own Spring version.
 - Spring Boot 3 only: `SigNozMdcThreadLocalAccessor`, which lets Reactor's
   automatic context propagation restore the SigNoz MDC on every thread hop
 - All auto-configuration entry points

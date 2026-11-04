@@ -18,17 +18,16 @@ go through the same masking as everything else (see [Masking](LOGGING.md#masking
 and bodies are cut off at `signoz.web.max-body-bytes` (default 4096).
 
 Headers are logged only with `signoz.web.log-headers: true`, and are masked by name with the same
-rules as other fields: `Authorization`, `X-API-Key`, `X-Auth-Token` and any name ending in `token`,
-`secret`, `signature` and so on. **`Cookie` and `Set-Cookie` are not masked by default.** If you log
-headers, mask them with `field-strategies`, which adds to the default rules (setting
-`masked-fields` would replace the default list):
+rules as other fields: `Authorization`, `Cookie`, `Set-Cookie`, `X-API-Key`, `X-Auth-Token` and
+any name ending in `token`, `secret`, `signature` and so on. If you set
+`signoz.logging.masked-fields`, keep `cookie` and `set-cookie` in your list (it replaces the
+defaults), or mask further headers with `field-strategies`, which adds to them:
 
 ```yaml
 signoz:
   logging:
     field-strategies:
-      cookie: full
-      set-cookie: full
+      x-session-id: full
 ```
 
 **Exclude paths** (defaults: `/actuator/**`, `/health`, `/health/**`, `/favicon.ico`). Setting the

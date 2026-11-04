@@ -1,9 +1,11 @@
-package io.signoz.springboot.outbound;
+package io.signoz.springboot.compat;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.mock.http.client.MockClientHttpResponse;
+import org.springframework.mock.http.server.reactive.MockServerHttpResponse;
 import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 
@@ -43,6 +45,18 @@ class ResponseStatusReaderTest {
     public interface RawAndTypedResponse {
         int getRawStatusCode();
 
+        StatusCode getStatusCode();
+    }
+
+    /** Server responses on Spring 5 and 6: a nullable raw status, null until one is set. */
+    public interface NullableRawResponse {
+        Integer getRawStatusCode();
+
+        StatusCode getStatusCode();
+    }
+
+    /** Server responses on Spring 7: only the typed status, null until one is set. */
+    public interface NullableTypedOnlyResponse {
         StatusCode getStatusCode();
     }
 
@@ -131,5 +145,66 @@ class ResponseStatusReaderTest {
         assertThat(CLIENT_HTTP_RESPONSE.read(new MockClientHttpResponse(new byte[0], HttpStatus.CREATED)))
                 .isEqualTo(201);
         assertThat(CLIENT_HTTP_RESPONSE.read(new MockClientHttpResponse(new byte[0], 499))).isEqualTo(499);
+    }
+
+    @Test
+    void readsANullableRawStatusAndReportsAMissingOneAsNull() {
+        ResponseStatusReader reader =
+                new ResponseStatusReader(NullableRawResponse.class, "getRawStatusCode", "getStatusCode");
+
+        NullableRawResponse unset = new NullableRawResponse() {
+            @Override
+            public Integer getRawStatusCode() {
+                return null;
+            }
+
+            @Override
+            public StatusCode getStatusCode() {
+                return null;
+            }
+        };
+        NullableRawResponse nonStandard = new NullableRawResponse() {
+            @Override
+            public Integer getRawStatusCode() {
+                return 499;
+            }
+
+            @Override
+            public StatusCode getStatusCode() {
+                // What Spring 5's HttpStatus.resolve does for a code it does not know.
+                return null;
+            }
+        };
+
+        assertThat(reader.find(unset)).isNull();
+        assertThat(reader.read(unset)).isEqualTo(ResponseStatusReader.UNKNOWN);
+        assertThat(reader.find(nonStandard)).isEqualTo(499);
+    }
+
+    @Test
+    void readsANullableTypedStatusWhenTheRawMethodIsGone() {
+        ResponseStatusReader reader = new ResponseStatusReader(
+                NullableTypedOnlyResponse.class, "getRawStatusCode", "getStatusCode");
+
+        NullableTypedOnlyResponse unset = () -> null;
+        NullableTypedOnlyResponse created = () -> new HiddenStatusCode(201);
+
+        assertThat(reader.find(unset)).isNull();
+        assertThat(reader.find(created)).isEqualTo(201);
+    }
+
+    @Test
+    void readsAWebFluxServerResponseStatus() {
+        ResponseStatusReader reader =
+                new ResponseStatusReader(ServerHttpResponse.class, "getRawStatusCode", "getStatusCode");
+
+        MockServerHttpResponse response = new MockServerHttpResponse();
+        assertThat(reader.find(response)).isNull();
+
+        response.setStatusCode(HttpStatus.CREATED);
+        assertThat(reader.find(response)).isEqualTo(201);
+
+        response.setRawStatusCode(499);
+        assertThat(reader.find(response)).isEqualTo(499);
     }
 }

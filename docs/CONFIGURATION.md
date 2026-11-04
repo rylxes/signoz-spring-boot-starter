@@ -70,7 +70,7 @@ These apply to whichever backend is active, Logback or Log4j2 (see [Logging](LOG
 **Default `masked-fields`** (setting the property replaces this list, so include the defaults you want to keep):
 `password`, `passwd`, `secret`, `token`, `apikey`, `api_key`, `creditcard`, `cardnumber`,
 `card_number`, `cvv`, `ssn`, `authorization`, `x-api-key`, `x-auth-token`, `access_token`,
-`refresh_token`, `id_token`, `client_secret`
+`refresh_token`, `id_token`, `client_secret`, `cookie`, `set-cookie`
 
 **How field names match.** Everywhere a field is masked by name (JSON, `key=value`, query
 parameters, headers, MDC, XML, `ObjectMasker`), names are compared lower-cased and without
