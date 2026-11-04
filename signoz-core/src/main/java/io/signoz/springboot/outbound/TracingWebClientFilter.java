@@ -33,7 +33,7 @@ public class TracingWebClientFilter implements ExchangeFilterFunction {
     private static final Logger logger = LoggerFactory.getLogger("SIGNOZ_OUTBOUND");
 
     /**
-     * Status reader that works on Spring 5, 6 and 7: {@code rawStatusCode()} was removed in
+     * Reads the status on Spring 5, 6 and 7: {@code ClientResponse.rawStatusCode()} was removed in
      * Spring 6.1. See {@link ResponseStatusReader}.
      */
     private static final ResponseStatusReader STATUS =

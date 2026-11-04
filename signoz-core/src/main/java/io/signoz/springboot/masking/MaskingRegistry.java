@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -236,10 +237,23 @@ public class MaskingRegistry {
      * Names are percent-decoded for the lookup; values reach the strategy still encoded, so a
      * strategy that keeps part of a value cannot write a decoded line break into the log.
      *
+     * <p>A non-sensitive parameter can still carry a secret in encoded form: an OAuth
+     * {@code redirect_uri=https%3A%2F%2Fapp%2Fcb%3Faccess_token%3D...} holds a URL whose own query
+     * has a token, and no pattern matches the encoded text. Such a value is decoded and its content
+     * masked (see {@link #maskEncodedValue}); only when that changes something is the parameter
+     * rewritten, so ordinary queries are logged exactly as they arrived.
+     *
      * @param rawQuery the raw query string, without the leading {@code ?}
      * @return the query string with sensitive parameter values masked
      */
     public String maskQueryString(String rawQuery) {
+        return maskQueryString(rawQuery, 0);
+    }
+
+    /** How many levels of percent-encoded nesting are decoded before a value is left as it is. */
+    private static final int MAX_QUERY_NESTING = 3;
+
+    private String maskQueryString(String rawQuery, int depth) {
         if (!maskEnabled || rawQuery == null || rawQuery.isEmpty()) {
             return rawQuery;
         }
@@ -249,23 +263,69 @@ public class MaskingRegistry {
             if (i > 0) {
                 masked.append('&');
             }
-            masked.append(maskQueryParameter(parameters[i]));
+            masked.append(maskQueryParameter(parameters[i], depth));
         }
         return masked.toString();
     }
 
-    private String maskQueryParameter(String parameter) {
+    private String maskQueryParameter(String parameter, int depth) {
         int separator = parameter.indexOf('=');
         if (separator >= 0) {
             String rawName = parameter.substring(0, separator);
             String name = decodeQueryName(rawName);
+            String rawValue = parameter.substring(separator + 1);
             if (isSensitiveField(name)) {
-                return rawName + '=' + mask(name, parameter.substring(separator + 1));
+                return rawName + '=' + mask(name, rawValue);
+            }
+            String maskedValue = maskEncodedValue(rawValue, depth);
+            if (maskedValue != null) {
+                return rawName + '=' + maskedValue;
             }
         }
         // Not a sensitive name, but the value can still hold a card number or a
         // semicolon-separated pair, so the payload patterns apply.
         return maskJsonString(parameter);
+    }
+
+    /**
+     * Masks what a percent-encoded query value carries once decoded.
+     *
+     * <p>The decoded value is masked as a URL when it holds a {@code ?} (its own query masked
+     * parameter by parameter, so a nested secret is masked whole) and otherwise as a query-shaped or
+     * free-text payload, which covers an encoded form body and a card number written as
+     * {@code 4111+1111+...}. Decoding repeats for each nested level up to
+     * {@value #MAX_QUERY_NESTING}, so double-encoded values are covered too.
+     *
+     * @return the masked value, re-encoded, or {@code null} when the value is not encoded, cannot
+     *         be decoded, or holds nothing to mask; the caller then keeps the original text
+     */
+    private String maskEncodedValue(String rawValue, int depth) {
+        if (depth >= MAX_QUERY_NESTING || (rawValue.indexOf('%') < 0 && rawValue.indexOf('+') < 0)) {
+            return null;
+        }
+        String decoded;
+        try {
+            decoded = URLDecoder.decode(rawValue, "UTF-8");
+        } catch (UnsupportedEncodingException | IllegalArgumentException e) {
+            return null;
+        }
+        String masked;
+        int query = decoded.indexOf('?');
+        if (query >= 0) {
+            masked = maskJsonString(decoded.substring(0, query)) + '?'
+                    + maskQueryString(decoded.substring(query + 1), depth + 1);
+        } else {
+            masked = maskQueryString(decoded, depth + 1);
+        }
+        if (masked.equals(decoded)) {
+            return null;
+        }
+        try {
+            // Re-encoded rather than logged decoded: the decoded text could hold a line break.
+            return URLEncoder.encode(masked, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            return null;
+        }
     }
 
     private static String decodeQueryName(String rawName) {

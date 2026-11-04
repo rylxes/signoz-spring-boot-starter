@@ -15,29 +15,31 @@ import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.web.client.RestTemplateCustomizer;
 import org.springframework.boot.web.reactive.function.client.WebClientCustomizer;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.client.ClientHttpResponse;
-import org.springframework.mock.http.client.MockClientHttpRequest;
-import org.springframework.mock.http.client.MockClientHttpResponse;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.reactive.function.client.ClientRequest;
 import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 /**
  * The outbound clients only mask the query strings they log if the auto-configuration hands them
  * the application's {@link MaskingRegistry}; a client built without one falls back to the default
  * rules and ignores {@code signoz.logging.*} customisations.
+ *
+ * <p>The status tests make a real call through a customized client against a response built by
+ * Spring, not a mock, so they fail if the client calls a status method this Spring version no
+ * longer has ({@code ClientResponse.rawStatusCode()} is gone from Spring 6.1, and
+ * {@code ClientHttpResponse.getRawStatusCode()} from Spring 7.0).
  */
 class SigNozOutboundAutoConfigurationTest {
 
@@ -94,45 +96,48 @@ class SigNozOutboundAutoConfigurationTest {
         });
     }
 
-    /**
-     * Uses real responses rather than mocks, so a status method missing from this module's Spring
-     * version fails here with {@code NoSuchMethodError} instead of being stubbed away.
-     */
     @Test
-    void restTemplateInterceptorLogsTheResponseStatus() {
+    void restTemplateCallLogsTheResponseStatus() {
         runner.run(ctx -> {
             RestTemplate restTemplate = new RestTemplate();
             ctx.getBean("sigNozRestTemplateCustomizer", RestTemplateCustomizer.class).customize(restTemplate);
-            TracingRestTemplateInterceptor interceptor = restTemplate.getInterceptors().stream()
-                    .filter(TracingRestTemplateInterceptor.class::isInstance)
-                    .map(TracingRestTemplateInterceptor.class::cast)
-                    .findFirst().orElseThrow(AssertionError::new);
+            MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
+            server.expect(requestTo("https://api.example.com/orders")).andRespond(withStatus(HttpStatus.CREATED));
 
-            ClientHttpResponse response = new MockClientHttpResponse(new byte[0], HttpStatus.CREATED);
-            interceptor.intercept(new MockClientHttpRequest(HttpMethod.GET, URI.create("https://api.example.com/x")),
-                    new byte[0], (request, body) -> response);
+            restTemplate.getForEntity("https://api.example.com/orders", String.class);
 
-            assertThat(lastLine()).contains("Outbound GET https://api.example.com/x -> 201 in ");
+            server.verify();
+            assertThat(lastLine()).matches(
+                    "\\[SigNoz] Outbound GET https://api\\.example\\.com/orders -> 201 in \\d+ms");
         });
     }
 
     @Test
-    void webClientFilterLogsTheResponseStatus() {
+    void webClientCallLogsTheResponseStatus() {
         runner.run(ctx -> {
-            WebClient.Builder builder = WebClient.builder();
-            ((WebClientCustomizer) ctx.getBean("sigNozWebClientCustomizer")).customize(builder);
-            List<ExchangeFilterFunction> filters = new ArrayList<ExchangeFilterFunction>();
-            builder.filters(filters::addAll);
-            TracingWebClientFilter filter = filters.stream()
-                    .filter(TracingWebClientFilter.class::isInstance)
-                    .map(TracingWebClientFilter.class::cast)
-                    .findFirst().orElseThrow(AssertionError::new);
+            WebClient client = customizedWebClient(ctx.getBean("sigNozWebClientCustomizer", WebClientCustomizer.class),
+                    ClientResponse.create(HttpStatus.CREATED).build());
 
-            filter.filter(ClientRequest.create(HttpMethod.GET, URI.create("https://api.example.com/x")).build(),
-                    request -> Mono.just(ClientResponse.create(HttpStatus.ACCEPTED).build())).block();
+            client.get().uri("https://api.example.com/orders").retrieve().toBodilessEntity().block();
 
-            assertThat(lastLine()).contains("Outbound GET https://api.example.com/x -> 202 in ");
+            assertThat(lastLine()).matches(
+                    "\\[SigNoz] Outbound GET https://api\\.example\\.com/orders -> 201 in \\d+ms");
         });
+    }
+
+    /**
+     * A {@link WebClient} customized by {@code customizer} whose exchanges all return
+     * {@code response} without touching the network.
+     */
+    private static WebClient customizedWebClient(WebClientCustomizer customizer, ClientResponse response) {
+        // Spring 5's build() looks up a connector even when an exchange function is set, and
+        // this module has no HTTP client library on its test classpath, so give it one it won't use.
+        WebClient.Builder builder = WebClient.builder()
+                .clientConnector((method, uri, requestCallback) ->
+                        Mono.error(new IllegalStateException("the exchange function handles every call")))
+                .exchangeFunction(request -> Mono.just(response));
+        customizer.customize(builder);
+        return builder.build();
     }
 
     private String lastLine() {

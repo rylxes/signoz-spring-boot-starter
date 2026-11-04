@@ -1,6 +1,11 @@
 package io.signoz.springboot.outbound;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.mock.http.client.MockClientHttpResponse;
+import org.springframework.web.reactive.function.client.ClientResponse;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -104,5 +109,27 @@ class ResponseStatusReaderTest {
         assertThat(reader.read(null)).isEqualTo(ResponseStatusReader.UNKNOWN);
         assertThat(new ResponseStatusReader(Object.class, "missing", "alsoMissing").read(new Object()))
                 .isEqualTo(ResponseStatusReader.UNKNOWN);
+    }
+
+    // The real Spring 5 types this module compiles against, read the way the outbound clients do.
+
+    private static final ResponseStatusReader CLIENT_RESPONSE =
+            new ResponseStatusReader(ClientResponse.class, "rawStatusCode", "statusCode");
+    private static final ResponseStatusReader CLIENT_HTTP_RESPONSE =
+            new ResponseStatusReader(ClientHttpResponse.class, "getRawStatusCode", "getStatusCode");
+
+    @Test
+    void readsAWebClientResponseStatus() {
+        assertThat(CLIENT_RESPONSE.read(ClientResponse.create(HttpStatus.CREATED).build())).isEqualTo(201);
+        // Spring 5's statusCode() throws for a code with no HttpStatus constant.
+        assertThat(CLIENT_RESPONSE.read(ClientResponse.create(499, ExchangeStrategies.withDefaults()).build()))
+                .isEqualTo(499);
+    }
+
+    @Test
+    void readsARestTemplateResponseStatus() {
+        assertThat(CLIENT_HTTP_RESPONSE.read(new MockClientHttpResponse(new byte[0], HttpStatus.CREATED)))
+                .isEqualTo(201);
+        assertThat(CLIENT_HTTP_RESPONSE.read(new MockClientHttpResponse(new byte[0], 499))).isEqualTo(499);
     }
 }

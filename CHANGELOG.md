@@ -79,6 +79,17 @@
   inside a logged exception message is masked too. A `TracingRestTemplateInterceptor` or
   `TracingWebClientFilter` built without a `MaskingRegistry` (for example through its
   single-argument constructor) masks with the default rules instead of logging the query as is.
+- **WebClient on Spring Boot 3.2+:** with `signoz.outbound.log-requests` on (the
+  default), every successful `WebClient` call failed with `NoSuchMethodError:
+  ClientResponse.rawStatusCode()`, because Spring Framework 6.1 removed that method. The
+  status is now read in a way that works on Spring 5 and 6, including non-standard codes
+  such as 499; if it can't be read, `-1` is logged and the call is unaffected.
+- **RestTemplate on Spring Framework 7 (Spring Boot 4):** the outbound interceptor
+  called `ClientHttpResponse.getRawStatusCode()`, which Spring 7.0 removed, so with
+  outbound logging on every `RestTemplate` call would fail with `NoSuchMethodError`.
+  It is still present (deprecated for removal) in Spring 6.2. Both outbound clients
+  now read the status in a way that works on Spring 5, 6 and 7, and logging the
+  status can no longer fail the call.
 - **Security:** field names matched only as listed, apart from case. `access_token` in
   `masked-fields` left `accessToken` and `access-token` in clear, and names no list
   anticipates, such as `auth_token`, `clientSecret` or `X-Amz-Signature`, were never masked.
@@ -88,15 +99,12 @@
   wherever fields are masked by name: JSON, `key=value`, query strings, headers, MDC, XML and
   `ObjectMasker`. Set `masked-field-suffixes: []` to keep the previous behaviour; note that
   names such as `nextPageToken` are now masked by default.
-- **WebClient on Spring Boot 3.2+:** with `signoz.outbound.log-requests` on (the
-  default), every successful `WebClient` call failed with `NoSuchMethodError:
-  ClientResponse.rawStatusCode()`, which Spring Framework 6.1 removed.
-- **RestTemplate on Spring Framework 7 (Spring Boot 4):** the outbound interceptor
-  called `ClientHttpResponse.getRawStatusCode()`, which Spring 7.0 removed, so with
-  outbound logging on every `RestTemplate` call would fail with `NoSuchMethodError`.
-  It is still present (deprecated for removal) in Spring 6.2. Both outbound clients
-  now read the status in a way that works on Spring 5, 6 and 7, and logging the
-  status can no longer fail the call.
+- **Security:** a secret nested in a percent-encoded query value was logged in clear, because
+  no pattern matches the encoded text. The common case is an OAuth
+  `redirect_uri=https%3A%2F%2Fapp%2Fcb%3Faccess_token%3D...`; a card number written as
+  `4111+1111+1111+1111` was missed the same way. Inbound and outbound HTTP logs now decode
+  such a value (up to three levels of nesting), mask its content with the usual rules and log
+  it re-encoded. Values with nothing to mask are logged exactly as they arrived.
 - **Startup crash without Micrometer:** an application without Actuator or
   `micrometer-core` failed to start with `ClassNotFoundException: MeterRegistry`.
   `@Timed` and `@AlertOnFailure` now log without it, as documented; metrics are
