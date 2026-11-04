@@ -15,6 +15,17 @@ import static org.assertj.core.api.Assertions.assertThatCode;
  */
 class MaskingRegistryPanAndEscapingTest {
 
+    /** Value planted in a sensitive position; it must never appear in masked output. */
+    private static final String CANARY = "s3cret";
+
+    /**
+     * Planted values carrying {@code $1}, {@code $2} and a JSON-escaped backslash, the characters
+     * {@code appendReplacement} would misread as group references. Both start with a prefix the
+     * assertions look for.
+     */
+    private static final String METACHAR_CANARY = "p$a\\\\ss$1word";
+    private static final String METACHAR_KEY_CANARY = "k$2";
+
     private static MaskingRegistry registry(String... maskedFields) {
         SigNozLoggingProperties props = new SigNozLoggingProperties();
         props.setMaskedFields(Arrays.asList(maskedFields));
@@ -59,7 +70,8 @@ class MaskingRegistryPanAndEscapingTest {
     @DisplayName("a secret containing $ or \\ does not break the whole masking pass")
     void handlesRegexMetacharactersInValues() {
         MaskingRegistry r = registry("password", "apikey");
-        String json = "{\"password\":\"p$a\\\\ss$1word\",\"apikey\":\"k$2\",\"user\":\"ada\"}";
+        String json = "{\"password\":\"" + METACHAR_CANARY + "\",\"apikey\":\"" + METACHAR_KEY_CANARY
+                + "\",\"user\":\"ada\"}";
 
         // Before quoteReplacement was applied, appendReplacement treated $1 / $2 in the substituted
         // text as group references: this threw IndexOutOfBoundsException, the exception escaped
@@ -83,9 +95,9 @@ class MaskingRegistryPanAndEscapingTest {
     @DisplayName("repeated calls return identical results (pattern caching is not stateful)")
     void patternCachingIsStable() {
         MaskingRegistry r = registry("password");
-        String json = "{\"password\":\"hunter2\",\"user\":\"ada\"}";
+        String json = "{\"password\":\"" + CANARY + "\",\"user\":\"ada\"}";
         String first = r.maskJsonString(json);
         assertThat(r.maskJsonString(json)).isEqualTo(first);
-        assertThat(first).doesNotContain("hunter2");
+        assertThat(first).doesNotContain(CANARY);
     }
 }

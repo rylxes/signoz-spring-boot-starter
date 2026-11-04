@@ -28,6 +28,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class MaskedArgumentAspectTest {
 
+    /** Value planted in a sensitive argument; masking must not change what the method receives. */
+    private static final String CANARY = "s3cret";
+
     private AnnotationConfigApplicationContext ctx;
     private SensitiveService service;
 
@@ -44,8 +47,8 @@ class MaskedArgumentAspectTest {
 
     @Test
     void fullMaskDoesNotChangeBusinessArgument() {
-        String result = service.login("user1", "MySecret123");
-        assertThat(result).isEqualTo("MySecret123");
+        String result = service.login("user1", CANARY);
+        assertThat(result).isEqualTo(CANARY);
     }
 
     @Test
@@ -68,9 +71,9 @@ class MaskedArgumentAspectTest {
 
     @Test
     void annotatedParamPassesThroughUnchanged() {
-        String[] result = service.mixed("plainArg", "secretArg");
+        String[] result = service.mixed("plainArg", CANARY);
         assertThat(result[0]).isEqualTo("plainArg");
-        assertThat(result[1]).isEqualTo("secretArg");
+        assertThat(result[1]).isEqualTo(CANARY);
     }
 
     @Test

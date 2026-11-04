@@ -25,6 +25,9 @@ class ProfilesAndObjectMaskingTest {
 
     private static final String PAN = "5061051800019666567";
 
+    /** Value planted in a sensitive position; it must never appear in masked output. */
+    private static final String CANARY = "s3cret";
+
     private static SigNozLoggingProperties props() {
         SigNozLoggingProperties p = new SigNozLoggingProperties();
         p.setMaskedFields(Collections.emptyList());
@@ -71,7 +74,7 @@ class ProfilesAndObjectMaskingTest {
         extras.put("channel", "POS");
         r.otherTxnDetails = extras;
         PurchaseRequest.Nested n = new PurchaseRequest.Nested();
-        n.secretKey = "sk_live_do_not_log";
+        n.secretKey = CANARY;
         n.terminalId = "2076SA59";
         r.nested = n;
         return r;
