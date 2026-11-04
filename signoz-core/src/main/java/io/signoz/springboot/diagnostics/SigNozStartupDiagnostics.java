@@ -48,7 +48,7 @@ public class SigNozStartupDiagnostics implements SmartInitializingSingleton {
         sb.append("[SigNoz] Config Summary:\n");
 
         // Line 1: endpoint, service, environment
-        sb.append("  endpoint=").append(props.getEndpoint())
+        sb.append("  endpoint=").append(OtlpExporterSettings.redact(props.getEndpoint()))
                 .append(", service=").append(props.getServiceName())
                 .append(", env=").append(props.getEnvironment())
                 .append("\n");

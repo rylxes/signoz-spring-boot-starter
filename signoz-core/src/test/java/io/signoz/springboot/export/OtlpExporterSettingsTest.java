@@ -132,4 +132,26 @@ class OtlpExporterSettingsTest {
         assertThat(s.getProtocol()).isEqualTo(OtlpExporterSettings.Protocol.GRPC);
         assertThat(s.endpoint(LOGS)).isEqualTo("http://alloy:4317");
     }
+
+    @Test
+    void describeRedactsCredentialsEmbeddedInEndpointUrls() {
+        String secret = "test-" + "only-value";
+        SigNozProperties props = new SigNozProperties();
+        props.setEndpoint("https://user:" + secret + "@collector.example.com:4318/otlp?api_key=" + secret);
+        props.getExporter().setProtocol("http/protobuf");
+
+        String described = OtlpExporterSettings.resolve(props).describe();
+
+        assertThat(described).doesNotContain(secret)
+                .contains("logs=https://***@collector.example.com:4318/otlp?***");
+    }
+
+    @Test
+    void redactLeavesPlainEndpointsAlone() {
+        assertThat(OtlpExporterSettings.redact("http://localhost:4317")).isEqualTo("http://localhost:4317");
+        assertThat(OtlpExporterSettings.redact("http://alloy:4318/v1/logs")).isEqualTo("http://alloy:4318/v1/logs");
+        assertThat(OtlpExporterSettings.redact("localhost:4317")).isEqualTo("localhost:4317");
+        assertThat(OtlpExporterSettings.redact("http://h:1/p#frag")).isEqualTo("http://h:1/p?***");
+        assertThat(OtlpExporterSettings.redact(null)).isNull();
+    }
 }

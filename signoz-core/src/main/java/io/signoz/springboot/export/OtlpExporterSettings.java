@@ -256,12 +256,49 @@ public final class OtlpExporterSettings {
         return b.build();
     }
 
-    /** One line for startup diagnostics; never includes header values. */
+    /**
+     * One line for startup diagnostics. Never includes header values, and endpoints go
+     * through {@link #redact(String)} so credentials embedded in a URL are not printed.
+     */
     public String describe() {
         return "backend=" + backend.name().toLowerCase(Locale.ROOT).replace('_', '-')
                 + ", protocol=" + getProtocolName()
-                + ", logs=" + logsEndpoint + ", traces=" + tracesEndpoint + ", metrics=" + metricsEndpoint
+                + ", logs=" + redact(logsEndpoint) + ", traces=" + redact(tracesEndpoint)
+                + ", metrics=" + redact(metricsEndpoint)
                 + (hasAuthorization(headers) ? ", auth=yes" : "");
+    }
+
+    /**
+     * {@code url} safe to log: user-info ({@code user:pass@}) becomes {@code ***@}, and a
+     * query string or fragment becomes {@code ?***}, since either can carry a token.
+     */
+    public static String redact(String url) {
+        if (url == null) {
+            return null;
+        }
+        String r = url;
+        int cut = indexOfAny(r, '?', '#');
+        if (cut >= 0) {
+            r = r.substring(0, cut) + "?***";
+        }
+        int scheme = r.indexOf("://");
+        int authorityStart = scheme >= 0 ? scheme + 3 : 0;
+        int authorityEnd = indexOfAny(r.substring(authorityStart), '/', '?');
+        String authority = authorityEnd >= 0
+                ? r.substring(authorityStart, authorityStart + authorityEnd) : r.substring(authorityStart);
+        int at = authority.lastIndexOf('@');
+        if (at >= 0) {
+            r = r.substring(0, authorityStart) + "***" + r.substring(authorityStart + at);
+        }
+        return r;
+    }
+
+    private static int indexOfAny(String s, char a, char b) {
+        int ia = s.indexOf(a);
+        int ib = s.indexOf(b);
+        if (ia < 0) return ib;
+        if (ib < 0) return ia;
+        return Math.min(ia, ib);
     }
 
     private static boolean removeIgnoreCase(Map<String, String> headers, String name) {
