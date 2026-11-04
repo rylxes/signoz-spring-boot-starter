@@ -21,6 +21,12 @@
   content is withheld instead of being written unmasked. (#8)
 - **`signoz-ingestion-key` is never sent to a non-SigNoz backend** (when
   `signoz.exporter.backend` is not `signoz`); a warning is logged once. (#14)
+- **`access_token`, `refresh_token`, `client_secret` and `code` are now masked by
+  default**, wherever field masking applies, including query strings and bodies.
+  `code` is an exact match on a generic name, so `{"code":"ERR_42"}` and `code=500` now log as `***`; numeric
+  JSON values and names such as `status_code` are unaffected. Setting
+  `signoz.logging.masked-fields` replaces the default list, so to keep `code`
+  visible, set that list without it.
 
 ### Added
 

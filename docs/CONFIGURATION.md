@@ -66,7 +66,8 @@ These apply to whichever backend is active, Logback or Log4j2 (see the README's 
 
 **Default `masked-fields`** (always included unless you override the list):
 `password`, `passwd`, `secret`, `token`, `apikey`, `api_key`, `creditcard`, `cardnumber`,
-`card_number`, `cvv`, `ssn`, `authorization`, `x-api-key`, `x-auth-token`
+`card_number`, `cvv`, `ssn`, `authorization`, `x-api-key`, `x-auth-token`, `access_token`,
+`refresh_token`, `client_secret`, `code`
 
 **Built-in message-level patterns** (applied even without configuration):
 - Passwords in log strings: `password=somevalue` → `password=***`

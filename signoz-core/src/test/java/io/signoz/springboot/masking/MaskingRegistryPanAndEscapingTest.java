@@ -171,4 +171,15 @@ class MaskingRegistryPanAndEscapingTest {
         assertThat(new MaskingRegistry(props).maskQueryString("token=" + CANARY))
                 .isEqualTo("token=" + CANARY);
     }
+
+    @Test
+    @DisplayName("OAuth parameters are masked by default")
+    void masksOAuthQueryParametersByDefault() {
+        MaskingRegistry registry = new MaskingRegistry(new SigNozLoggingProperties());
+
+        for (String name : new String[]{"access_token", "refresh_token", "client_secret", "code"}) {
+            assertThat(registry.maskQueryString("state=xyz&" + name + "=" + CANARY))
+                    .isEqualTo("state=xyz&" + name + "=***");
+        }
+    }
 }
