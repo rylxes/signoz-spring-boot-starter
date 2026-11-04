@@ -68,6 +68,18 @@ Each Boot module runs its tests twice: once with Logback (the default execution)
 Log4j2 as the real logging backend (the `log4j2-backend` execution, which runs only
 `*Log4j2BackendTest` classes).
 
+**End-to-end tests** start two demo services that call each other over HTTP, Kafka, SQS, gRPC and
+STOMP, on Spring Boot 2 and 3, and check every feature against the docs: alone, all together,
+on Log4j2 and with the OpenTelemetry Java agent. They take about 25 minutes and need ports 4317
+and 4318 free, so they are not part of the normal build. Run them before a release, and when you
+change how a feature behaves at runtime:
+
+```bash
+mvn verify -Pe2e
+```
+
+See [signoz-e2e/README.md](signoz-e2e/README.md) for what they cover and how to add a scenario.
+
 ---
 
 ## Rules that keep the starter compatible
@@ -156,6 +168,7 @@ Commit subjects follow a light [Conventional Commits](https://www.conventionalco
 Before opening a pull request, check that:
 
 - [ ] `mvn clean verify --batch-mode` passes (ideally on JDK 17 and 21, as CI does)
+- [ ] For runtime behaviour changes: `mvn verify -Pe2e` passes
 - [ ] Boot 2 and Boot 3 modules received the same change, tests included
 - [ ] Bug fixes have a test that failed before the fix
 - [ ] CHANGELOG.md has an entry for any user-visible change

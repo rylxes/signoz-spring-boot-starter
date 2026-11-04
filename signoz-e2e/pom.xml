@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.rylxes</groupId>
+        <artifactId>signoz-spring-boot-starter-parent</artifactId>
+        <version>1.1.0</version>
+    </parent>
+
+    <artifactId>signoz-e2e</artifactId>
+    <packaging>pom</packaging>
+    <name>SigNoz E2E Tests</name>
+    <description>
+        End-to-end tests: two demo services that call each other, run as separate JVMs against
+        an in-process OTLP receiver, on Spring Boot 2 and 3. Built only with -Pe2e; never published.
+    </description>
+
+    <properties>
+        <!-- Never deployed or signed, even if the release profile is active. -->
+        <maven.deploy.skip>true</maven.deploy.skip>
+        <gpg.skip>true</gpg.skip>
+        <maven.javadoc.skip>true</maven.javadoc.skip>
+        <maven.source.skip>true</maven.source.skip>
+        <skipPublishing>true</skipPublishing>
+
+        <e2e.grpc.version>1.62.2</e2e.grpc.version>
+        <e2e.otel-proto.version>1.3.2-alpha</e2e.otel-proto.version>
+        <e2e.aws-sdk-v1.version>1.12.692</e2e.aws-sdk-v1.version>
+        <e2e.elasticmq.version>1.6.9</e2e.elasticmq.version>
+        <e2e.otel-agent.version>2.33.1</e2e.otel-agent.version>
+    </properties>
+
+    <modules>
+        <module>signoz-e2e-support</module>
+        <module>signoz-e2e-boot3</module>
+        <module>signoz-e2e-boot2</module>
+    </modules>
+</project>

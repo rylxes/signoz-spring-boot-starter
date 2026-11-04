@@ -31,6 +31,11 @@ mvn -pl signoz-spring-boot3 -am test -Dtest=ClassName -Dsurefire.failIfNoSpecifi
 JDK 17+ is required for the full build. Each Boot module also runs `*Log4j2BackendTest` classes in a
 separate `log4j2-backend` surefire execution. Run the full build before you commit.
 
+`mvn verify -Pe2e` runs the end-to-end suite (`signoz-e2e/`, about 25 minutes, needs ports
+4317/4318 free): two services calling each other, every feature alone and together, on Boot 2 and
+3. Run it when you change runtime behaviour, and add a scenario for any new feature
+(`signoz-e2e/README.md`). Failing services' output is in `signoz-e2e/*/target/e2e-logs/`.
+
 ## Rules
 
 1. **Boot 2 and Boot 3 modules mirror each other.** Apply every change, including tests, to both.
