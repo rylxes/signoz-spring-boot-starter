@@ -45,7 +45,12 @@ class UserContextMdcFilterOrderTest {
                 "alice", "n/a", AuthorityUtils.createAuthorityList("ROLE_USER")));
         UserContextMdcFilter filter = new UserContextMdcFilter(new UserContextEnricher(new SigNozUserContextProperties()));
         Map<String, String> seen = new HashMap<String, String>();
-        FilterChain handler = (req, res) -> seen.putAll(MDC.getCopyOfContextMap());
+        FilterChain handler = (req, res) -> {
+            Map<String, String> mdc = MDC.getCopyOfContextMap();   // null when the MDC is empty
+            if (mdc != null) {
+                seen.putAll(mdc);
+            }
+        };
 
         filter.doFilter(new MockHttpServletRequest("GET", "/me"), new MockHttpServletResponse(), handler);
 
