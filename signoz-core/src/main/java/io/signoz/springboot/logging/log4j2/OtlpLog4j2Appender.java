@@ -21,8 +21,9 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Log4j2 counterpart of {@code OtlpLogbackAppender}: forwards log events to a SigNoz (or any
- * OpenTelemetry) collector over OTLP gRPC, masking bodies and context values through the
+ * Log4j2 counterpart of {@code OtlpLogbackAppender}: forwards log events to SigNoz, Grafana or
+ * any OpenTelemetry receiver over OTLP ({@code grpc} by default, or {@code http/protobuf} via
+ * {@link #setProtocol(String)}), masking bodies and context values through the
  * shared {@link OtlpLogSupport}, so export behaves identically on both backends.
  *
  * <p>Each event becomes an OTel log record with the event timestamp, mapped severity, the

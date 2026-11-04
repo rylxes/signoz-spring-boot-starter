@@ -93,6 +93,19 @@ class OtlpExporterSettingsTest {
 
         assertThat(OtlpExporterSettings.resolve(props).getHeaders())
                 .containsEntry("authorization", "Bearer abc").doesNotContainKey("Authorization");
+        assertThat(OtlpExporterSettings.resolve(props).describe()).contains("auth=yes");
+    }
+
+    @Test
+    void trimsWhitespaceAroundEndpoints() {
+        SigNozProperties props = new SigNozProperties();
+        props.setEndpoint("  http://collector:4317 \n");
+        props.getExporter().setLogsEndpoint(" http://loki:3100/otlp/v1/logs ");
+
+        OtlpExporterSettings s = OtlpExporterSettings.resolve(props);
+
+        assertThat(s.endpoint(TRACES)).isEqualTo("http://collector:4317");
+        assertThat(s.endpoint(LOGS)).isEqualTo("http://loki:3100/otlp/v1/logs");
     }
 
     @Test

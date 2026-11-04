@@ -261,7 +261,7 @@ public final class OtlpExporterSettings {
         return "backend=" + backend.name().toLowerCase(Locale.ROOT).replace('_', '-')
                 + ", protocol=" + getProtocolName()
                 + ", logs=" + logsEndpoint + ", traces=" + tracesEndpoint + ", metrics=" + metricsEndpoint
-                + (headers.containsKey("Authorization") ? ", auth=yes" : "");
+                + (hasAuthorization(headers) ? ", auth=yes" : "");
     }
 
     private static boolean removeIgnoreCase(Map<String, String> headers, String name) {
@@ -292,7 +292,12 @@ public final class OtlpExporterSettings {
         return r;
     }
 
+    /** Trimmed value, or {@code null} when blank, so stray whitespace never reaches an exporter. */
     private static String blankToNull(String s) {
-        return s == null || s.trim().isEmpty() ? null : s;
+        if (s == null) {
+            return null;
+        }
+        String t = s.trim();
+        return t.isEmpty() ? null : t;
     }
 }
