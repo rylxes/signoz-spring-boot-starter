@@ -71,6 +71,21 @@ class OtlpExporterSettingsTest {
     }
 
     @Test
+    void neverSendsTheSigNozIngestionKeyToAnotherBackend() {
+        // Shared application.yml carries the SigNoz key; a dev profile switches to Grafana.
+        SigNozProperties props = new SigNozProperties();
+        props.getHeaders().put("Signoz-Ingestion-Key", "k");
+        props.getHeaders().put("x-team", "orders");
+        props.getExporter().setBackend(SigNozExporterProperties.Backend.GRAFANA_CLOUD);
+
+        assertThat(OtlpExporterSettings.resolve(props).getHeaders())
+                .doesNotContainKey("Signoz-Ingestion-Key").containsEntry("x-team", "orders");
+
+        props.getExporter().setBackend(SigNozExporterProperties.Backend.SIGNOZ);
+        assertThat(OtlpExporterSettings.resolve(props).getHeaders()).containsKey("Signoz-Ingestion-Key");
+    }
+
+    @Test
     void anExplicitAuthorizationHeaderIsNotOverridden() {
         SigNozProperties props = new SigNozProperties();
         props.getHeaders().put("authorization", "Bearer abc");

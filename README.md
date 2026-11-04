@@ -261,6 +261,43 @@ The startup summary logs the resolved export settings, e.g.
 
 ---
 
+## Different Backends per Environment
+
+One application can export to Grafana in one environment and SigNoz in another, for
+example dev → Grafana Cloud and prod → SigNoz Cloud. All export settings are ordinary
+Spring properties, so put each backend in its own profile:
+
+```yaml
+# application.yml (shared)
+signoz:
+  service-name: orders
+---
+spring.config.activate.on-profile: prod
+signoz:
+  endpoint: https://ingest.eu.signoz.cloud:443
+  headers:
+    signoz-ingestion-key: ${SIGNOZ_INGESTION_KEY}
+---
+spring.config.activate.on-profile: dev
+signoz:
+  endpoint: https://otlp-gateway-prod-eu-west-2.grafana.net/otlp
+  exporter:
+    backend: grafana-cloud
+    basic-auth:
+      username: ${GRAFANA_INSTANCE_ID}
+      password: ${GRAFANA_CLOUD_TOKEN}
+```
+
+Or set the same keys as environment variables per deployment (`SIGNOZ_ENDPOINT`,
+`SIGNOZ_EXPORTER_BACKEND`, `SIGNOZ_EXPORTER_BASICAUTH_PASSWORD`, …).
+
+Keep `signoz.headers` in the SigNoz profile. Spring merges map properties across
+profiles, so headers in the shared file reach every environment. As a safeguard, the
+SigNoz-only `signoz-ingestion-key` header is never sent when `signoz.exporter.backend`
+is not `signoz` (a warning is logged once).
+
+---
+
 ## Agentless Trace Propagation
 
 You don't need the OpenTelemetry Java Agent to get **end-to-end log correlation**

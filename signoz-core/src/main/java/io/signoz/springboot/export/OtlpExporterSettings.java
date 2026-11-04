@@ -17,6 +17,8 @@ import io.opentelemetry.sdk.metrics.export.MetricExporter;
 import io.opentelemetry.sdk.trace.export.SpanExporter;
 import io.signoz.springboot.properties.SigNozExporterProperties;
 import io.signoz.springboot.properties.SigNozProperties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -25,6 +27,7 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Resolves {@code signoz.endpoint}, {@code signoz.headers} and {@code signoz.exporter.*} into
@@ -41,7 +44,9 @@ import java.util.concurrent.TimeUnit;
  *       and the protocol is HTTP, the OTLP HTTP default port 4318 is used instead.</li>
  *   <li><b>Headers</b>: {@code signoz.headers}, plus {@code Authorization: Basic …} built from
  *       {@code signoz.exporter.basic-auth} unless an {@code Authorization} header is already
- *       configured.</li>
+ *       configured. For a backend other than {@code signoz}, the SigNoz-only
+ *       {@code signoz-ingestion-key} header is dropped (with a one-time warning), so an
+ *       environment that switches backend by profile never leaks the SigNoz key.</li>
  * </ul>
  */
 public final class OtlpExporterSettings {
@@ -59,6 +64,11 @@ public final class OtlpExporterSettings {
     }
 
     static final String DEFAULT_GRPC_ENDPOINT = "http://localhost:4317";
+    /** SigNoz Cloud's ingestion header; meaningless (and a credential leak) for other backends. */
+    static final String SIGNOZ_KEY_HEADER = "signoz-ingestion-key";
+
+    private static final Logger log = LoggerFactory.getLogger(OtlpExporterSettings.class);
+    private static final AtomicBoolean WARNED_DROPPED_SIGNOZ_KEY = new AtomicBoolean();
     static final String DEFAULT_HTTP_ENDPOINT = "http://localhost:4318";
 
     private final Protocol protocol;
@@ -100,6 +110,15 @@ public final class OtlpExporterSettings {
         Map<String, String> headers = new LinkedHashMap<String, String>();
         if (props.getHeaders() != null) {
             headers.putAll(props.getHeaders());
+        }
+        // signoz.headers usually lives in the shared application.yml, and Spring merges map
+        // properties across profiles, so a profile that switches to another backend would
+        // otherwise send the SigNoz ingestion key to it (e.g. dev on Grafana, prod on SigNoz).
+        if (backend != SigNozExporterProperties.Backend.SIGNOZ && removeIgnoreCase(headers, SIGNOZ_KEY_HEADER)
+                && WARNED_DROPPED_SIGNOZ_KEY.compareAndSet(false, true)) {
+            log.warn("[SigNoz] Not sending the '{}' header: signoz.exporter.backend is {}, not signoz. "
+                    + "Move signoz.headers into the profile that exports to SigNoz.", SIGNOZ_KEY_HEADER,
+                    backend.name().toLowerCase(Locale.ROOT).replace('_', '-'));
         }
         SigNozExporterProperties.BasicAuth auth = exporter.getBasicAuth();
         if (auth != null && blankToNull(auth.getUsername()) != null && !hasAuthorization(headers)) {
@@ -243,6 +262,17 @@ public final class OtlpExporterSettings {
                 + ", protocol=" + getProtocolName()
                 + ", logs=" + logsEndpoint + ", traces=" + tracesEndpoint + ", metrics=" + metricsEndpoint
                 + (headers.containsKey("Authorization") ? ", auth=yes" : "");
+    }
+
+    private static boolean removeIgnoreCase(Map<String, String> headers, String name) {
+        boolean removed = false;
+        for (java.util.Iterator<String> it = headers.keySet().iterator(); it.hasNext(); ) {
+            if (name.equalsIgnoreCase(it.next())) {
+                it.remove();
+                removed = true;
+            }
+        }
+        return removed;
     }
 
     private static boolean hasAuthorization(Map<String, String> headers) {
