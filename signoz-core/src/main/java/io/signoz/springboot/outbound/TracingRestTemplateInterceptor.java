@@ -12,6 +12,7 @@ import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.ClientHttpResponse;
 
 import java.io.IOException;
+import java.net.URI;
 
 /**
  * A {@link ClientHttpRequestInterceptor} that injects W3C {@code traceparent} headers
@@ -21,7 +22,8 @@ import java.io.IOException;
  * <p>Header propagation uses the format:
  * {@code 00-{traceId}-{spanId}-{traceFlags}}.
  *
- * <p>Sensitive query parameters in the logged URL are masked with the {@link MaskingRegistry}.
+ * <p>The logged URL has its sensitive query parameters masked and any user info removed (see
+ * {@link OutboundUrl}), so {@code ?access_token=abc} does not reach the log in clear.
  */
 public class TracingRestTemplateInterceptor implements ClientHttpRequestInterceptor {
 
@@ -38,7 +40,9 @@ public class TracingRestTemplateInterceptor implements ClientHttpRequestIntercep
     private final MaskingRegistry maskingRegistry;
 
     /**
-     * Creates a new interceptor that masks logged query strings with the default masking rules.
+     * Creates a new interceptor that removes user info from logged URLs but does not mask their
+     * query strings. Prefer {@link #TracingRestTemplateInterceptor(SigNozOutboundProperties,
+     * MaskingRegistry)}.
      *
      * @param properties outbound tracing configuration
      */
@@ -50,13 +54,12 @@ public class TracingRestTemplateInterceptor implements ClientHttpRequestIntercep
      * Creates a new interceptor.
      *
      * @param properties      outbound tracing configuration
-     * @param maskingRegistry masks sensitive query parameters in the logged URL; {@code null}
-     *                        falls back to the default masking rules
+     * @param maskingRegistry masks sensitive query parameters in logged URLs; may be {@code null}
      */
     public TracingRestTemplateInterceptor(SigNozOutboundProperties properties,
                                           MaskingRegistry maskingRegistry) {
         this.properties = properties;
-        this.maskingRegistry = OutboundUriRenderer.orDefault(maskingRegistry);
+        this.maskingRegistry = maskingRegistry;
     }
 
     @Override
@@ -83,7 +86,7 @@ public class TracingRestTemplateInterceptor implements ClientHttpRequestIntercep
             if (properties.isLogRequests()) {
                 logger.info("[SigNoz] Outbound {} {} -> {} in {}ms",
                         request.getMethod(),
-                        OutboundUriRenderer.render(request.getURI(), maskingRegistry),
+                        OutboundUrl.forLog(request.getURI(), maskingRegistry),
                         STATUS.read(response),
                         duration);
             }
@@ -91,11 +94,13 @@ public class TracingRestTemplateInterceptor implements ClientHttpRequestIntercep
         } catch (IOException ex) {
             long duration = System.currentTimeMillis() - start;
             if (properties.isLogRequests()) {
+                URI uri = request.getURI();
+                String url = OutboundUrl.forLog(uri, maskingRegistry);
                 logger.warn("[SigNoz] Outbound {} {} -> FAILED in {}ms: {}",
                         request.getMethod(),
-                        OutboundUriRenderer.render(request.getURI(), maskingRegistry),
+                        url,
                         duration,
-                        ex.getMessage());
+                        OutboundUrl.maskMessage(ex.getMessage(), uri, url));
             }
             throw ex;
         }

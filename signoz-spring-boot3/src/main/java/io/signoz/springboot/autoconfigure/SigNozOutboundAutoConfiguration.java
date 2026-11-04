@@ -14,9 +14,6 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * Auto-configures outbound HTTP tracing for RestTemplate and WebClient.
- *
- * <p>The {@link MaskingRegistry} is optional: without one, logged query strings are masked with
- * the default rules.
  */
 @Configuration
 @ConditionalOnProperty(name = "signoz.outbound.enabled", havingValue = "true", matchIfMissing = true)
@@ -30,8 +27,9 @@ public class SigNozOutboundAutoConfiguration {
         @ConditionalOnMissingBean(name = "sigNozRestTemplateCustomizer")
         public RestTemplateCustomizer sigNozRestTemplateCustomizer(SigNozOutboundProperties props,
                                                                    ObjectProvider<MaskingRegistry> maskingRegistry) {
+            MaskingRegistry registry = maskingRegistry.getIfAvailable();
             return restTemplate -> restTemplate.getInterceptors().add(
-                    new TracingRestTemplateInterceptor(props, maskingRegistry.getIfAvailable()));
+                    new TracingRestTemplateInterceptor(props, registry));
         }
     }
 
@@ -43,9 +41,10 @@ public class SigNozOutboundAutoConfiguration {
         @ConditionalOnMissingBean(name = "sigNozWebClientCustomizer")
         public Object sigNozWebClientCustomizer(SigNozOutboundProperties props,
                                                 ObjectProvider<MaskingRegistry> maskingRegistry) {
+            MaskingRegistry registry = maskingRegistry.getIfAvailable();
             // WebClientCustomizer adds the tracing filter
             return (org.springframework.boot.web.reactive.function.client.WebClientCustomizer)
-                    builder -> builder.filter(new TracingWebClientFilter(props, maskingRegistry.getIfAvailable()));
+                    builder -> builder.filter(new TracingWebClientFilter(props, registry));
         }
     }
 }

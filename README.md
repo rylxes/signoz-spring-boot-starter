@@ -403,10 +403,15 @@ public class UserService {
 }
 ```
 
-Built-in fields that are **always** masked (case-insensitive): `password`, `passwd`, `secret`,
+Built-in fields that are **always** masked: `password`, `passwd`, `secret`,
 `token`, `apikey`, `api_key`, `creditcard`, `cardnumber`, `cvv`, `ssn`, `authorization`,
 `x-api-key`, `x-auth-token`, `access_token`,
 `refresh_token`, `id_token`, `client_secret`.
+
+Names match ignoring case, `_`, `-` and `.`, so `access_token` also covers `accessToken` and
+`access-token`. Any other name ending in `token`, `secret`, `password`, `passwd`, `apikey`,
+`signature` or `privatekey` is masked too (`auth_token`, `clientSecret`, `X-Amz-Signature`);
+change that list with `signoz.logging.masked-field-suffixes`, or set it to `[]` to turn it off.
 
 Add your own fields in `application.yml`:
 

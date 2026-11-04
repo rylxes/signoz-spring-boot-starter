@@ -59,7 +59,8 @@ These apply to whichever backend is active, Logback or Log4j2 (see the README's 
 |----------|------|---------|-------------|
 | `signoz.logging.mode` | `OTLP` \| `JSON` \| `BOTH` | `BOTH` | Output mode. `OTLP` sends logs to SigNoz via gRPC. `JSON` writes structured JSON to stdout. `BOTH` does both simultaneously. |
 | `signoz.logging.mask-enabled` | `boolean` | `true` | Master switch for field and message masking. When `false`, all masking is bypassed. |
-| `signoz.logging.masked-fields` | `List<String>` | see below | Case-insensitive field names whose values are fully replaced with `***`. |
+| `signoz.logging.masked-fields` | `List<String>` | see below | Field names whose values are fully replaced with `***`. Matching ignores case, `_`, `-` and `.`, so `access_token` also covers `accessToken` and `access-token`. |
+| `signoz.logging.masked-field-suffixes` | `List<String>` | `token`, `secret`, `password`, `passwd`, `apikey`, `signature`, `privatekey` | Names ending in one of these are masked in full even when not listed (`auth_token`, `clientSecret`, `X-Amz-Signature`). Compared like field names. A field with its own entry keeps its own strategy. `[]` turns suffix matching off. |
 | `signoz.logging.custom-patterns` | `List<PatternConfig>` | `[]` | Additional regex-based masking rules applied to log messages. |
 | `signoz.logging.include-mdc` | `boolean` | `true` | Whether to include the MDC context map (e.g. `traceId`, `spanId`) in every log record. |
 | `signoz.logging.include-caller-data` | `boolean` | `false` | Whether to include caller class and line number. Useful for debugging; has a small performance cost. |
@@ -68,6 +69,14 @@ These apply to whichever backend is active, Logback or Log4j2 (see the README's 
 `password`, `passwd`, `secret`, `token`, `apikey`, `api_key`, `creditcard`, `cardnumber`,
 `card_number`, `cvv`, `ssn`, `authorization`, `x-api-key`, `x-auth-token`, `access_token`,
 `refresh_token`, `id_token`, `client_secret`
+
+**How field names match.** Everywhere a field is masked by name (JSON, `key=value`, query
+parameters, headers, MDC, XML, `ObjectMasker`), names are compared lower-cased and without
+`_`, `-` and `.`. On top of the listed names, any name ending in one of
+`masked-field-suffixes` is masked in full. Names that only *start* with or *contain* such a
+word stay visible: `tokenType`, `maxTokens`, `passwordPolicy`, `signatureAlgorithm`. Note that
+pagination cursors such as `nextPageToken` end in `token` and are masked; list them in your own
+`masked-field-suffixes` without `token` if you need them readable.
 
 **Built-in message-level patterns** (applied even without configuration):
 - Passwords in log strings: `password=somevalue` → `password=***`
@@ -153,7 +162,7 @@ These apply to both servlet (`HttpLoggingFilter`) and WebFlux (`HttpLoggingWebFi
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `signoz.outbound.enabled` | `boolean` | `true` | Enable/disable outbound HTTP tracing for RestTemplate/WebClient. |
-| `signoz.outbound.log-requests` | `boolean` | `true` | Log outbound HTTP method, URL, status, and duration. Sensitive query parameters are masked and URL credentials (`user:password@`) are omitted. |
+| `signoz.outbound.log-requests` | `boolean` | `true` | Log outbound HTTP method, URL, status, and duration. |
 | `signoz.outbound.propagate-headers` | `boolean` | `true` | Inject W3C `traceparent` header into outbound requests. |
 
 ---

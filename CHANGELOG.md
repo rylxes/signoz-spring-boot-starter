@@ -71,17 +71,24 @@
   and WebFlux filters, so a request such as `?token=abc` put the secret in the
   logs. `signoz.web.log-query-string` is on by default. Sensitive parameters are now
   masked using the same field names and strategies as bodies.
-- **Security:** outbound HTTP logging (`RestTemplate` and `WebClient`) wrote the full
-  URL unmasked, so `getForObject("https://api/x?access_token=abc", …)` put the
-  token in the logs. `signoz.outbound.log-requests` is on by default, and the
-  console, file and plain `LogstashEncoder` appenders apply no masking of their
-  own. Sensitive query parameters are now masked with the same rules as inbound
-  query strings, including percent-encoded names (`access%5Ftoken`) and values
-  containing commas. URL credentials (`user:password@`) are no longer logged.
+- **Security:** outbound RestTemplate and WebClient logging (`SIGNOZ_OUTBOUND`) wrote the full
+  request URL, so `?access_token=abc` reached plain-text appenders in clear, and a client
+  exception that quoted the URL repeated it. `signoz.outbound.log-requests` is on by default.
+  The logged URL now has sensitive query parameters masked the same way as inbound requests,
+  user info (`https://user:pass@host`) replaced with `***` and the fragment dropped; the URL
+  inside a logged exception message is masked too.
+- **Security:** field names matched only as listed, apart from case. `access_token` in
+  `masked-fields` left `accessToken` and `access-token` in clear, and names no list
+  anticipates, such as `auth_token`, `clientSecret` or `X-Amz-Signature`, were never masked.
+  Names are now compared ignoring `_`, `-` and `.`, and any name ending in one of the new
+  `signoz.logging.masked-field-suffixes` (`token`, `secret`, `password`, `passwd`, `apikey`,
+  `signature`, `privatekey`) is masked in full unless it has its own entry. This applies
+  wherever fields are masked by name: JSON, `key=value`, query strings, headers, MDC, XML and
+  `ObjectMasker`. Set `masked-field-suffixes: []` to keep the previous behaviour; note that
+  names such as `nextPageToken` are now masked by default.
 - **WebClient on Spring Boot 3.2+:** with `signoz.outbound.log-requests` on (the
   default), every successful `WebClient` call failed with `NoSuchMethodError:
-  ClientResponse.rawStatusCode()`, which Spring Framework 6.1 removed. The status is
-  now read in a way that works on Spring 5 and 6.
+  ClientResponse.rawStatusCode()`, which Spring Framework 6.1 removed.
 - **RestTemplate on Spring Framework 7 (Spring Boot 4):** the outbound interceptor
   called `ClientHttpResponse.getRawStatusCode()`, which Spring 7.0 removed, so with
   outbound logging on every `RestTemplate` call would fail with `NoSuchMethodError`.
