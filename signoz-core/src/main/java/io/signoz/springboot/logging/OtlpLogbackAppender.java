@@ -9,7 +9,9 @@ import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.logs.LogRecordBuilder;
 import io.opentelemetry.api.logs.Severity;
 import io.opentelemetry.sdk.logs.SdkLoggerProvider;
+import io.signoz.springboot.export.OtlpExporterSettings;
 import io.signoz.springboot.masking.MaskingRegistry;
+import io.signoz.springboot.properties.SigNozExporterProperties;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -49,6 +51,7 @@ public class OtlpLogbackAppender extends AppenderBase<ILoggingEvent> {
     private String environment = "default";
     private long exportTimeoutMs = 5000L;
     private Map<String, String> headers = new HashMap<String, String>();
+    private String protocol;
 
     private MaskingRegistry maskingRegistry;
 
@@ -61,7 +64,9 @@ public class OtlpLogbackAppender extends AppenderBase<ILoggingEvent> {
     public void start() {
         try {
             this.loggerProvider = OtlpLogSupport.createLoggerProvider(
-                    endpoint, headers, exportTimeoutMs, serviceName, serviceVersion, environment);
+                    endpoint, headers,
+                    OtlpExporterSettings.parseProtocol(protocol, SigNozExporterProperties.Backend.SIGNOZ),
+                    exportTimeoutMs, serviceName, serviceVersion, environment);
 
             this.otelLogger = loggerProvider.get(serviceName);
             if (maskingRegistry == null) {
@@ -99,6 +104,8 @@ public class OtlpLogbackAppender extends AppenderBase<ILoggingEvent> {
                 }
                 builder.setAllAttributes(attrs.build());
             }
+            // Trace context from the event's MDC, so backends link the record to its trace.
+            OtlpLogSupport.applyTraceContext(builder, mdc);
 
             // Attach logger name
             builder.setAttribute(AttributeKey.stringKey("logger"), event.getLoggerName());
@@ -178,6 +185,9 @@ public class OtlpLogbackAppender extends AppenderBase<ILoggingEvent> {
     public long getExportTimeoutMs() { return exportTimeoutMs; }
 
     public void setHeaders(Map<String, String> headers) { this.headers = headers; }
+
+    /** {@code grpc} (default) or {@code http/protobuf}. */
+    public void setProtocol(String protocol) { this.protocol = protocol; }
     public Map<String, String> getHeaders() { return headers; }
 
     /**

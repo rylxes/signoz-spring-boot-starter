@@ -1,0 +1,8 @@
+# "dev": Grafana Cloud.
+signoz:
+  endpoint: https://otlp-gateway-prod-eu-west-2.grafana.net/otlp
+  exporter:
+    backend: grafana-cloud
+    basic-auth:
+      username: "123456"
+      password: ${ENVTEST_GRAFANA_TOKEN}

@@ -20,6 +20,7 @@ audit trails, and JVM/HTTP metrics — with no code changes required.
 |---------|-------------|
 | **Structured logging** | JSON output via `SigNozJsonEncoder` — works out of the box, no `logback.xml` needed. Excludes Spring Boot's bootstrap `LoggerContext` properties (`CONSOLE_LOG_PATTERN`, `PID`, …) by default |
 | **OTLP log export** | `OtlpLogbackAppender` ships logs directly to SigNoz collector |
+| **Grafana support** | Logs, traces and metrics to Grafana Cloud or a self-hosted Loki / Tempo / Mimir over OTLP/HTTP, with Basic auth and per-signal endpoints. See [Grafana](#grafana-loki-tempo-mimir) |
 | **Field masking** | `@Masked` on parameters; built-in rules for passwords, tokens, credit cards, SSNs |
 | **Distributed tracing** | `@Traced` creates OpenTelemetry spans; trace-ID injected into MDC automatically |
 | **HTTP logging** | `HttpLoggingFilter` (servlet) / `HttpLoggingWebFilter` (WebFlux) logs method, path, status, duration for every request |
@@ -206,6 +207,95 @@ signoz:
 The `signoz.headers` map supports any custom headers. Each header is added to all
 OTLP export requests (logs, traces, and metrics). Find your ingestion key in
 **SigNoz Cloud > Settings > Ingestion**.
+
+---
+
+## Grafana (Loki, Tempo, Mimir)
+
+The same starter exports to Grafana. Logs go to Loki, traces to Tempo and metrics to
+Mimir, all over OTLP, which Grafana Cloud and Loki 3.x accept natively. Nothing else in
+your setup changes: masking, JSON console output, trace propagation and annotations work
+the same.
+
+**Grafana Cloud.** Take the OTLP endpoint, instance ID and an access token with write
+scopes from your stack's OpenTelemetry (OTLP) connection details in the Grafana Cloud portal:
+
+```yaml
+signoz:
+  endpoint: https://otlp-gateway-prod-eu-west-2.grafana.net/otlp
+  service-name: my-app
+  environment: production
+  exporter:
+    backend: grafana-cloud          # OTLP over HTTP; the gateway has no gRPC
+    basic-auth:
+      username: 123456              # instance ID
+      password: ${GRAFANA_CLOUD_TOKEN}
+```
+
+Logs are sent to `…/otlp/v1/logs`, traces to `…/otlp/v1/traces` and metrics to
+`…/otlp/v1/metrics`.
+
+**Self-hosted Grafana stack.** Point each signal at its backend, or send everything to
+Grafana Alloy or an OpenTelemetry Collector:
+
+```yaml
+signoz:
+  exporter:
+    backend: otlp
+    protocol: http/protobuf
+    logs-endpoint: http://loki:3100/otlp/v1/logs
+    traces-endpoint: http://tempo:4318/v1/traces
+    metrics-endpoint: http://mimir:9009/otlp/v1/metrics
+```
+
+**Logs linked to traces.** Every exported log record carries its trace and span IDs
+(from the active request, even without the OTel agent), so Grafana's "Logs for this
+span" and Loki → Tempo links work out of the box. `service.name`, `service.version` and
+`deployment.environment` are sent as resource attributes; by default Loki indexes
+`service.name` and `deployment.environment` as labels and keeps the rest, including MDC
+fields (`mdc_*`), as structured metadata.
+
+The startup summary logs the resolved export settings, e.g.
+`export: backend=grafana-cloud, protocol=http/protobuf, logs=…/otlp/v1/logs, … auth=yes`
+(credentials are never printed). See `signoz.exporter.*` in the
+[configuration reference](docs/CONFIGURATION.md).
+
+---
+
+## Different Backends per Environment
+
+One application can export to Grafana in one environment and SigNoz in another, for
+example dev → Grafana Cloud and prod → SigNoz Cloud. All export settings are ordinary
+Spring properties, so put each backend in its own profile:
+
+```yaml
+# application.yml (shared)
+signoz:
+  service-name: orders
+---
+spring.config.activate.on-profile: prod
+signoz:
+  endpoint: https://ingest.eu.signoz.cloud:443
+  headers:
+    signoz-ingestion-key: ${SIGNOZ_INGESTION_KEY}
+---
+spring.config.activate.on-profile: dev
+signoz:
+  endpoint: https://otlp-gateway-prod-eu-west-2.grafana.net/otlp
+  exporter:
+    backend: grafana-cloud
+    basic-auth:
+      username: ${GRAFANA_INSTANCE_ID}
+      password: ${GRAFANA_CLOUD_TOKEN}
+```
+
+Or set the same keys as environment variables per deployment (`SIGNOZ_ENDPOINT`,
+`SIGNOZ_EXPORTER_BACKEND`, `SIGNOZ_EXPORTER_BASICAUTH_PASSWORD`, …).
+
+Keep `signoz.headers` in the SigNoz profile. Spring merges map properties across
+profiles, so headers in the shared file reach every environment. As a safeguard, the
+SigNoz-only `signoz-ingestion-key` header is never sent when `signoz.exporter.backend`
+is not `signoz` (a warning is logged once).
 
 ---
 

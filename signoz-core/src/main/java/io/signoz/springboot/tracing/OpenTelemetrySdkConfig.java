@@ -7,8 +7,9 @@ import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
 import io.opentelemetry.context.propagation.ContextPropagators;
 import io.opentelemetry.context.propagation.TextMapPropagator;
-import io.opentelemetry.exporter.otlp.metrics.OtlpGrpcMetricExporter;
-import io.opentelemetry.exporter.otlp.trace.OtlpGrpcSpanExporter;
+import io.opentelemetry.sdk.metrics.export.MetricExporter;
+import io.opentelemetry.sdk.trace.export.SpanExporter;
+import io.signoz.springboot.export.OtlpExporterSettings;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.metrics.export.PeriodicMetricReader;
@@ -25,7 +26,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Duration;
-import java.util.Map;
 
 /**
  * Spring {@code @Configuration} that bootstraps the OpenTelemetry SDK and
@@ -69,19 +69,12 @@ public class OpenTelemetrySdkConfig implements DisposableBean {
                 )));
 
         SigNozTracingProperties tracingProps = props.getTracing();
-        Map<String, String> headers = props.getHeaders();
 
         // --- Tracer Provider ---
-        io.opentelemetry.exporter.otlp.trace.OtlpGrpcSpanExporterBuilder spanBuilder =
-                OtlpGrpcSpanExporter.builder()
-                        .setEndpoint(props.getEndpoint())
-                        .setTimeout(Duration.ofMillis(tracingProps.getExportTimeoutMs()));
-        if (headers != null) {
-            for (Map.Entry<String, String> entry : headers.entrySet()) {
-                spanBuilder.addHeader(entry.getKey(), entry.getValue());
-            }
-        }
-        OtlpGrpcSpanExporter spanExporter = spanBuilder.build();
+        // Protocol, endpoint and credentials come from signoz.endpoint / signoz.exporter.*,
+        // shared with log and metric export (SigNoz over gRPC, Grafana Cloud over HTTP, …).
+        OtlpExporterSettings exportSettings = OtlpExporterSettings.resolve(props);
+        SpanExporter spanExporter = exportSettings.spanExporter(tracingProps.getExportTimeoutMs());
 
         Sampler sampler = tracingProps.getSampleRate() >= 1.0
                 ? Sampler.alwaysOn()
@@ -97,16 +90,7 @@ public class OpenTelemetrySdkConfig implements DisposableBean {
                 .build();
 
         // --- Meter Provider ---
-        io.opentelemetry.exporter.otlp.metrics.OtlpGrpcMetricExporterBuilder metricBuilder =
-                OtlpGrpcMetricExporter.builder()
-                        .setEndpoint(props.getEndpoint())
-                        .setTimeout(Duration.ofMillis(tracingProps.getExportTimeoutMs()));
-        if (headers != null) {
-            for (Map.Entry<String, String> entry : headers.entrySet()) {
-                metricBuilder.addHeader(entry.getKey(), entry.getValue());
-            }
-        }
-        OtlpGrpcMetricExporter metricExporter = metricBuilder.build();
+        MetricExporter metricExporter = exportSettings.metricExporter(tracingProps.getExportTimeoutMs());
 
         SdkMeterProvider meterProvider = SdkMeterProvider.builder()
                 .setResource(resource)

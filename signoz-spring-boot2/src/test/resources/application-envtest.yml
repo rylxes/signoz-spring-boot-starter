@@ -1,0 +1,5 @@
+# Shared settings, as in a real application.yml (used by PerEnvironmentBackendTest).
+signoz:
+  service-name: orders
+  headers:
+    signoz-ingestion-key: ${ENVTEST_SIGNOZ_KEY}

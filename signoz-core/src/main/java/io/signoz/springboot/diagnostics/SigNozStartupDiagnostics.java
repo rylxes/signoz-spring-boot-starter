@@ -1,6 +1,7 @@
 package io.signoz.springboot.diagnostics;
 
 import io.signoz.springboot.detect.AgentDetector;
+import io.signoz.springboot.export.OtlpExporterSettings;
 import io.signoz.springboot.properties.SigNozProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,10 +48,17 @@ public class SigNozStartupDiagnostics implements SmartInitializingSingleton {
         sb.append("[SigNoz] Config Summary:\n");
 
         // Line 1: endpoint, service, environment
-        sb.append("  endpoint=").append(props.getEndpoint())
+        sb.append("  endpoint=").append(OtlpExporterSettings.redact(props.getEndpoint()))
                 .append(", service=").append(props.getServiceName())
                 .append(", env=").append(props.getEnvironment())
                 .append("\n");
+
+        // Export: protocol and per-signal endpoints (header values are never printed)
+        try {
+            sb.append("  export: ").append(OtlpExporterSettings.resolve(props).describe()).append("\n");
+        } catch (IllegalArgumentException e) {
+            sb.append("  export: INVALID (").append(e.getMessage()).append(")\n");
+        }
 
         // Line 2: agent detection
         String agentStatus = AgentDetector.isAgentPresent() ? "DETECTED" : "NOT_DETECTED";

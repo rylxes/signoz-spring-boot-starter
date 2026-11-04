@@ -1,6 +1,7 @@
 package io.signoz.springboot.logging.log4j2;
 
 import io.signoz.springboot.detect.AgentDetector;
+import io.signoz.springboot.export.OtlpExporterSettings;
 import io.signoz.springboot.masking.MaskingRegistry;
 import io.signoz.springboot.properties.SigNozErrorProperties;
 import io.signoz.springboot.properties.SigNozLoggingProperties;
@@ -89,15 +90,18 @@ public final class SigNozLog4j2Configurer {
                 }
             } else if (!root.getAppenders().containsKey(OTLP_APPENDER_NAME)) {
                 OtlpLog4j2Appender appender = new OtlpLog4j2Appender(OTLP_APPENDER_NAME);
-                appender.setEndpoint(props.getEndpoint());
+                OtlpExporterSettings exportSettings = OtlpExporterSettings.resolve(props);
+                appender.setEndpoint(exportSettings.endpoint(OtlpExporterSettings.Signal.LOGS));
+                appender.setProtocol(exportSettings.getProtocolName());
                 appender.setServiceName(props.getServiceName());
                 appender.setServiceVersion(props.getServiceVersion());
                 appender.setEnvironment(props.getEnvironment());
-                appender.setHeaders(props.getHeaders());
+                appender.setHeaders(exportSettings.getHeaders());
                 appender.setMaskingRegistry(maskingRegistry);
                 appender.setErrorFingerprintDepth(errorDepth);
                 attach(config, root, appender);
-                log.info("[SigNoz] Log4j2 OTLP log appender attached → {}", props.getEndpoint());
+                log.info("[SigNoz] Log4j2 OTLP log appender attached → {} ({})",
+                        exportSettings.endpoint(OtlpExporterSettings.Signal.LOGS), exportSettings.getProtocolName());
             }
         }
 

@@ -47,7 +47,9 @@ public class SigNozLog4j2JsonLayout extends AbstractStringLayout {
     private final int errorFingerprintDepth;
 
     /**
-     * @param maskingRegistry       masks the serialised line; {@code null} disables masking
+     * @param maskingRegistry       masks each value before it is serialised (message, context,
+     *                              stack trace); content is withheld if masking throws;
+     *                              {@code null} disables masking
      * @param errorFingerprintDepth stack frames used for {@code errorId}; {@code 0} disables it
      */
     public SigNozLog4j2JsonLayout(MaskingRegistry maskingRegistry, int errorFingerprintDepth) {

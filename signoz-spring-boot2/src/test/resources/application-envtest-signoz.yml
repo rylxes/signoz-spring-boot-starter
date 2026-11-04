@@ -1,0 +1,3 @@
+# "prod": SigNoz Cloud.
+signoz:
+  endpoint: https://ingest.eu.signoz.cloud:443
