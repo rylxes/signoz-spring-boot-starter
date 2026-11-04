@@ -56,7 +56,7 @@ Pick the artifact that matches your Spring Boot version:
 <dependency>
     <groupId>io.github.rylxes</groupId>
     <artifactId>signoz-spring-boot2-starter</artifactId>
-    <version>1.0.11</version>
+    <version>1.1.0</version>
 </dependency>
 ```
 
@@ -65,7 +65,7 @@ Pick the artifact that matches your Spring Boot version:
 <dependency>
     <groupId>io.github.rylxes</groupId>
     <artifactId>signoz-spring-boot3-starter</artifactId>
-    <version>1.0.11</version>
+    <version>1.1.0</version>
 </dependency>
 ```
 
@@ -109,7 +109,7 @@ To switch a project to Log4j2, exclude Spring Boot's default logging starter and
 <dependency>
     <groupId>io.github.rylxes</groupId>
     <artifactId>signoz-spring-boot3-starter</artifactId>
-    <version>1.0.11</version>
+    <version>1.1.0</version>
     <exclusions>
         <exclusion>
             <groupId>org.springframework.boot</groupId>
