@@ -153,7 +153,7 @@ These apply to both servlet (`HttpLoggingFilter`) and WebFlux (`HttpLoggingWebFi
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `signoz.outbound.enabled` | `boolean` | `true` | Enable/disable outbound HTTP tracing for RestTemplate/WebClient. |
-| `signoz.outbound.log-requests` | `boolean` | `true` | Log outbound HTTP method, URL, status, and duration. |
+| `signoz.outbound.log-requests` | `boolean` | `true` | Log outbound HTTP method, URL, status, and duration. Sensitive query parameters are masked and URL credentials (`user:password@`) are omitted. |
 | `signoz.outbound.propagate-headers` | `boolean` | `true` | Inject W3C `traceparent` header into outbound requests. |
 
 ---

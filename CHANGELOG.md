@@ -71,6 +71,13 @@
   and WebFlux filters, so a request such as `?token=abc` put the secret in the
   logs. `signoz.web.log-query-string` is on by default. Sensitive parameters are now
   masked using the same field names and strategies as bodies.
+- **Security:** outbound HTTP logging (`RestTemplate` and `WebClient`) wrote the full
+  URL unmasked, so `getForObject("https://api/x?access_token=abc", …)` put the
+  token in the logs. `signoz.outbound.log-requests` is on by default, and the
+  console, file and plain `LogstashEncoder` appenders apply no masking of their
+  own. Sensitive query parameters are now masked with the same rules as inbound
+  query strings, including percent-encoded names (`access%5Ftoken`) and values
+  containing commas. URL credentials (`user:password@`) are no longer logged.
 - **Startup crash without Micrometer:** an application without Actuator or
   `micrometer-core` failed to start with `ClassNotFoundException: MeterRegistry`.
   `@Timed` and `@AlertOnFailure` now log without it, as documented; metrics are

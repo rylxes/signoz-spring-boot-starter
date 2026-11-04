@@ -1,5 +1,6 @@
 package io.signoz.springboot.outbound;
 
+import io.signoz.springboot.masking.MaskingRegistry;
 import io.signoz.springboot.properties.SigNozOutboundProperties;
 import io.signoz.springboot.tracing.TraceContextCodec;
 import org.slf4j.Logger;
@@ -19,20 +20,36 @@ import java.io.IOException;
  *
  * <p>Header propagation uses the format:
  * {@code 00-{traceId}-{spanId}-{traceFlags}}.
+ *
+ * <p>Sensitive query parameters in the logged URL are masked with the {@link MaskingRegistry}.
  */
 public class TracingRestTemplateInterceptor implements ClientHttpRequestInterceptor {
 
     private static final Logger logger = LoggerFactory.getLogger("SIGNOZ_OUTBOUND");
 
     private final SigNozOutboundProperties properties;
+    private final MaskingRegistry maskingRegistry;
 
     /**
-     * Creates a new interceptor.
+     * Creates a new interceptor that masks logged query strings with the default masking rules.
      *
      * @param properties outbound tracing configuration
      */
     public TracingRestTemplateInterceptor(SigNozOutboundProperties properties) {
+        this(properties, null);
+    }
+
+    /**
+     * Creates a new interceptor.
+     *
+     * @param properties      outbound tracing configuration
+     * @param maskingRegistry masks sensitive query parameters in the logged URL; {@code null}
+     *                        falls back to the default masking rules
+     */
+    public TracingRestTemplateInterceptor(SigNozOutboundProperties properties,
+                                          MaskingRegistry maskingRegistry) {
         this.properties = properties;
+        this.maskingRegistry = OutboundUriRenderer.orDefault(maskingRegistry);
     }
 
     @Override
@@ -59,7 +76,7 @@ public class TracingRestTemplateInterceptor implements ClientHttpRequestIntercep
             if (properties.isLogRequests()) {
                 logger.info("[SigNoz] Outbound {} {} -> {} in {}ms",
                         request.getMethod(),
-                        request.getURI(),
+                        OutboundUriRenderer.render(request.getURI(), maskingRegistry),
                         response.getRawStatusCode(),
                         duration);
             }
@@ -69,7 +86,7 @@ public class TracingRestTemplateInterceptor implements ClientHttpRequestIntercep
             if (properties.isLogRequests()) {
                 logger.warn("[SigNoz] Outbound {} {} -> FAILED in {}ms: {}",
                         request.getMethod(),
-                        request.getURI(),
+                        OutboundUriRenderer.render(request.getURI(), maskingRegistry),
                         duration,
                         ex.getMessage());
             }
