@@ -1,6 +1,6 @@
 # Architecture
 
-This document is for contributors and integrators who want to understand how the SigNoz Spring Boot
+This document is for contributors (see also [CONTRIBUTING.md](../CONTRIBUTING.md)) and integrators who want to understand how the SigNoz Spring Boot
 Starter is structured, how its modules relate to each other, and where to look when extending it.
 
 ---
@@ -65,9 +65,13 @@ two separate modules rather than sharing a single compiled artifact.
 - `SigNozReactiveWebAutoConfiguration`, which registers the reactive filters from
   `signoz-core`'s `io.signoz.springboot.webflux` package (one shared copy: the
   WebFlux API has no `javax`/`jakarta` split). The core classes are compiled
-  against Spring 5.3 / Reactor 3.4 and use only APIs that also exist in Spring 6
-  (`getRawStatusCode()`, `DataBuffer.getByte()`); both modules' integration tests
-  run them against their own Spring version.
+  against Spring 5.3 / Reactor 3.4, so they must only call APIs that also exist on
+  newer Spring versions. Methods that were removed or retyped must be resolved
+  reflectively; `ResponseStatusReader` does this for the HTTP client response
+  status. One known gap remains: `HttpLoggingWebFilter` calls
+  `ServerHttpResponse.getRawStatusCode()`, which exists through Spring 6.2 but was
+  removed in 7.0. Both modules' integration tests run the core classes against
+  their own Spring version.
 - Spring Boot 3 only: `SigNozMdcThreadLocalAccessor`, which lets Reactor's
   automatic context propagation restore the SigNoz MDC on every thread hop
 - All auto-configuration entry points
@@ -157,7 +161,7 @@ non-noop `GlobalOpenTelemetry` instance (compared by reference equality with
 the noop singleton — *not* by class-name substring, which produces false
 positives once anything has touched `GlobalOpenTelemetry`).
 
-This gating is the contract behind the README's "Agent-aware" callouts: when
+This gating is the contract behind the "Skipped automatically when the OpenTelemetry Java agent is present" notes in [Tracing](TRACING.md): when
 the agent is on, the agent owns instrumentation; when it's off, the starter
 fills the gap. There is no double-instrumentation path.
 
@@ -280,7 +284,7 @@ value, because LogstashEncoder writes no whitespace between fields, and swallow 
    }
    ```
 
-2. Register it at runtime via a custom `MaskingRegistry` bean (see README — Overriding Beans).
+2. Register it at runtime via a custom `MaskingRegistry` bean (see [Customizing](CUSTOMIZING.md#custom-masking-registry)).
 
 ---
 

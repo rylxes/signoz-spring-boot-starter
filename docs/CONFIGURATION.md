@@ -53,7 +53,7 @@ remain active.
 
 ## Logging properties (`signoz.logging.*`)
 
-These apply to whichever backend is active, Logback or Log4j2 (see the README's *Logging Backend Support*).
+These apply to whichever backend is active, Logback or Log4j2 (see [Logging](LOGGING.md#logback-and-log4j2)).
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
@@ -62,10 +62,12 @@ These apply to whichever backend is active, Logback or Log4j2 (see the README's 
 | `signoz.logging.masked-fields` | `List<String>` | see below | Field names whose values are fully replaced with `***`. Matching ignores case, `_`, `-` and `.`, so `access_token` also covers `accessToken` and `access-token`. |
 | `signoz.logging.masked-field-suffixes` | `List<String>` | `token`, `secret`, `password`, `passwd`, `apikey`, `signature`, `privatekey` | Names ending in one of these are masked in full even when not listed (`auth_token`, `clientSecret`, `X-Amz-Signature`). Compared like field names. A field with its own entry keeps its own strategy. `[]` turns suffix matching off. |
 | `signoz.logging.custom-patterns` | `List<PatternConfig>` | `[]` | Additional regex-based masking rules applied to log messages. |
-| `signoz.logging.include-mdc` | `boolean` | `true` | Whether to include the MDC context map (e.g. `traceId`, `spanId`) in every log record. |
+| `signoz.logging.field-strategies` | `Map<String, String>` | `{}` | Per-field strategy: `full`, `partial:<prefix>:<suffix>`, `partial` (= `partial:2:2`) or `regex:<pattern>`. Wins over `masked-fields` and `profiles`. An invalid value fails startup. |
+| `signoz.logging.profiles` | `List<String>` | `[]` | Curated field sets: `pci` (card data; PAN keeps BIN and last four) and `pii` (government IDs, bank accounts, contact details, names). Applied on top of `masked-fields`. |
+| `signoz.logging.include-mdc` | `boolean` | `true` | Whether to include the MDC context map (e.g. `requestId`, `trace_id`, `span_id`) in every log record. |
 | `signoz.logging.include-caller-data` | `boolean` | `false` | Whether to include caller class and line number. Useful for debugging; has a small performance cost. |
 
-**Default `masked-fields`** (always included unless you override the list):
+**Default `masked-fields`** (setting the property replaces this list, so include the defaults you want to keep):
 `password`, `passwd`, `secret`, `token`, `apikey`, `api_key`, `creditcard`, `cardnumber`,
 `card_number`, `cvv`, `ssn`, `authorization`, `x-api-key`, `x-auth-token`, `access_token`,
 `refresh_token`, `id_token`, `client_secret`
@@ -203,7 +205,7 @@ awspring 2.x `spring-cloud-aws-messaging`, or awspring 3.x `spring-cloud-aws-sqs
 | `signoz.grpc.propagate-trace` | `boolean` | `true` | Inject/extract W3C `traceparent` in gRPC `Metadata`. |
 
 The interceptors are exposed as beans; you wire them onto a channel / server
-manually. See README → "gRPC Trace Propagation" for snippets.
+manually. See [Tracing → gRPC](TRACING.md#grpc) for snippets.
 
 ---
 
