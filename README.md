@@ -1,1046 +1,172 @@
 # SigNoz Spring Boot Starter
 
-> **[Full Documentation](https://rylxes.com/docs/signoz-spring-boot-starter)** — Complete usage guide, configuration reference, and API docs.
-
-A zero-config, all-in-one Spring Boot starter that ships **logs**, **metrics**, and **traces** to
-[SigNoz](https://signoz.io) via OpenTelemetry. Drop in one Maven dependency and get structured
-logging, automatic field masking, trace-ID correlation, distributed spans, HTTP request logging,
-audit trails, and JVM/HTTP metrics — with no code changes required.
-
 [![Java 8+](https://img.shields.io/badge/Java-8%2B-blue)](https://www.oracle.com/java/)
 [![Spring Boot 2.x](https://img.shields.io/badge/Spring%20Boot-2.x-green)](https://spring.io/projects/spring-boot)
 [![Spring Boot 3.x](https://img.shields.io/badge/Spring%20Boot-3.x-green)](https://spring.io/projects/spring-boot)
 [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-1.34-blueviolet)](https://opentelemetry.io)
+[![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey)](https://www.apache.org/licenses/LICENSE-2.0)
+
+One dependency that sends your Spring Boot application's **logs, traces and metrics** to
+[SigNoz](https://signoz.io) or Grafana over OpenTelemetry, with JSON logs, sensitive-field masking
+and trace IDs in your logs. No code changes needed; every feature has a sensible default and
+can be switched off.
+
+Full documentation site: **[rylxes.com/docs/signoz-spring-boot-starter](https://rylxes.com/docs/signoz-spring-boot-starter)**
 
 ---
 
-## Features
+## Contents
 
-| Feature | How it works |
-|---------|-------------|
-| **Structured logging** | JSON output via `SigNozJsonEncoder` — works out of the box, no `logback.xml` needed. Excludes Spring Boot's bootstrap `LoggerContext` properties (`CONSOLE_LOG_PATTERN`, `PID`, …) by default |
-| **OTLP log export** | `OtlpLogbackAppender` ships logs directly to SigNoz collector |
-| **Grafana support** | Logs, traces and metrics to Grafana Cloud or a self-hosted Loki / Tempo / Mimir over OTLP/HTTP, with Basic auth and per-signal endpoints. See [Grafana](#grafana-loki-tempo-mimir) |
-| **Field masking** | `@Masked` on parameters; built-in rules for passwords, tokens, credit cards, SSNs |
-| **Distributed tracing** | `@Traced` creates OpenTelemetry spans; trace-ID injected into MDC automatically |
-| **HTTP logging** | `HttpLoggingFilter` (servlet) / `HttpLoggingWebFilter` (WebFlux) logs method, path, status, duration for every request |
-| **Agentless trace correlation** | `TraceIdMdcFilter` (servlet) / `TraceIdWebFilter` (WebFlux) reuses inbound `traceparent` / `X-Request-ID` and emits both on the response — end-to-end log correlation across services without running an OTEL agent |
-| **WebFlux support** | Reactive `WebFilter`s for trace IDs, HTTP logging and user context; on Spring Boot 3 the MDC follows each request across Reactor thread hops. See [WebFlux](#webflux-reactive-applications) |
-| **Audit trail** | `@AuditLog` publishes a structured `AuditEvent` (actor, action, outcome, args) |
-| **JVM + HTTP metrics** | Micrometer OTLP registry sends metrics to SigNoz automatically |
-| **Compile-time logger** | `@SigNozLog` injects `private static final Logger log` via APT (like `@Slf4j`) |
-| **Method profiling** | `@Timed` logs method duration, WARN for slow methods, publishes Micrometer Timer |
-| **Alert on failure** | `@AlertOnFailure` increments a Micrometer Counter when a method throws |
-| **Outbound HTTP tracing** | Auto-injects `traceparent` + `X-Request-ID` into RestTemplate/WebClient calls (with MDC fallback when no OTEL span is active), logs outbound requests |
-| **Kafka trace propagation** | Producer/Consumer interceptors propagate W3C `traceparent` via Kafka record headers, with or without an OTel agent |
-| **SQS trace propagation** | AWS SDK v1 `RequestHandler2` injects `traceparent` into SQS `MessageAttributes`; AOP aspect on `@SqsListener` extracts it on the consumer side. Auto-skipped when the OTel Java Agent is on |
-| **gRPC trace propagation** | `ClientInterceptor` injects `traceparent` into gRPC `Metadata`; `ServerInterceptor` extracts to MDC. Auto-skipped when the OTel Java Agent is on |
-| **WebSocket / STOMP trace propagation** | Handshake interceptor captures inbound `traceparent` on the upgrade; `ChannelInterceptor` propagates per-frame. Auto-skipped when the OTel Java Agent is on |
-| **Slow query detection** | DataSource proxy times SQL queries, WARN above threshold (default 500ms) |
-| **Startup diagnostics** | Logs full config summary at boot — what's enabled, endpoints, thresholds |
-| **User context enrichment** | Extracts `userId`/`userEmail`/`userRoles` from SecurityContext (or the reactive SecurityContext in WebFlux) into MDC |
-| **Error fingerprinting** | SHA-256 hash of exception type + stack → stable `errorId` in MDC for grouping |
-| **Async context propagation** | `TracingTaskDecorator` copies MDC (traceId, requestId) to `@Async` worker threads |
-| **Log sampling** | Probabilistic filtering — reduce INFO volume while ERROR/WARN always pass |
+- [Quick start](#quick-start)
+- [What you get](#what-you-get)
+- [Where telemetry goes](#where-telemetry-goes)
+- [What's automatic and what needs wiring](#whats-automatic-and-what-needs-wiring)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
 
 ---
 
-## Quick Start
+## Quick start
 
-### 1. Add the dependency
+**1. Add the starter** for your Spring Boot version:
 
-Pick the artifact that matches your Spring Boot version:
+| Spring Boot | Java | Artifact |
+|---|---|---|
+| 2.x | 8+ | `io.github.rylxes:signoz-spring-boot2-starter` |
+| 3.x | 17+ | `io.github.rylxes:signoz-spring-boot3-starter` |
 
 ```xml
-<!-- Spring Boot 2.x project -->
 <dependency>
     <groupId>io.github.rylxes</groupId>
-    <artifactId>signoz-spring-boot2-starter</artifactId>
+    <artifactId>signoz-spring-boot3-starter</artifactId>  <!-- or signoz-spring-boot2-starter -->
     <version>1.1.0</version>
 </dependency>
 ```
 
-```xml
-<!-- Spring Boot 3.x project (requires Java 17+) -->
-<dependency>
-    <groupId>io.github.rylxes</groupId>
-    <artifactId>signoz-spring-boot3-starter</artifactId>
-    <version>1.1.0</version>
-</dependency>
-```
-
-### 2. Minimum configuration
+**2. Point it at your collector** in `application.yml`:
 
 ```yaml
-# application.yml
 signoz:
-  endpoint: http://localhost:4317   # SigNoz OTLP gRPC endpoint
+  endpoint: http://localhost:4317   # SigNoz OTLP gRPC endpoint (this is the default)
   service-name: my-app
   service-version: 1.0.0
   environment: production
 ```
 
-That's it — all features are on by default.
+**3. Start the app.** At startup the starter logs a summary of what it enabled and where it
+exports. Your console output is now JSON, log lines written while serving a request carry its
+`requestId` and `trace_id`, and logs and traces are exported to SigNoz.
+
+> **Metrics** need one more dependency, `io.micrometer:micrometer-registry-otlp`, plus
+> `spring-boot-starter-actuator` for HTTP server metrics (the Spring Boot BOM manages both
+> versions). See [Metrics and performance](docs/METRICS.md).
 
 ---
 
-## Logging Backend Support
+## What you get
 
-The starter's logging features work with both **Logback** (Spring Boot's default) and
-**Log4j2**:
+**Logs** — [Logging guide](docs/LOGGING.md)
+- JSON console output and OTLP log export, on Logback (Spring Boot's default) or Log4j2.
+- Sensitive values masked everywhere they're logged: passwords, tokens, card numbers, SSNs,
+  `Authorization` headers, query strings and request bodies. Add your own field names and patterns.
+- `requestId`, `trace_id` and `span_id` on every line written during a request; `userId`,
+  `userEmail` and `userRoles` for authenticated requests; a stable `errorId` on errors so identical failures group together.
+- Optional sampling of INFO/DEBUG logs; ERROR and WARN always pass.
 
-| Feature | Logback | Log4j2 |
-|---|---|---|
-| JSON console output | `SigNozJsonEncoder` (`SIGNOZ_JSON`) | `SigNozLog4j2JsonLayout` (`SIGNOZ_JSON`), same field names |
-| Masking (`signoz.logging.masked-fields`, profiles, patterns) | yes | yes, applied to each value before serialisation |
-| OTLP log export | `OtlpLogbackAppender` (`SIGNOZ_OTLP`) | `OtlpLog4j2Appender` (`SIGNOZ_OTLP`), shared export and masking code |
-| Error fingerprinting (`errorId`) | MDC, via a turbo filter | added to the JSON line and OTLP record for ERROR events with a throwable |
-| Log sampling | turbo filter | context-wide Log4j2 filter |
-| MDC trace fields | yes | yes (the SLF4J MDC is Log4j2's ThreadContext) |
+**Traces and correlation** — [Tracing guide](docs/TRACING.md)
+- One trace ID follows a request across services over HTTP (RestTemplate, WebClient), Kafka, SQS,
+  gRPC and WebSocket/STOMP, and into `@Async` threads.
+- Works with or without the OpenTelemetry Java agent. Without it you get log correlation across
+  services; with it you also get span waterfalls. The starter detects the agent and steps aside.
+- `@Traced` creates spans around your own methods.
 
-The starter detects the active backend at startup and configures that one. In JSON
-mode it replaces Spring Boot's default console appender (`CONSOLE` for Logback,
-`Console` for Log4j2) unless your configuration already writes JSON.
+**HTTP** — [Web guide](docs/WEB.md)
+- One access-log line per request (method, path, status, duration, optionally masked headers and
+  bodies), for Spring MVC and Spring WebFlux.
+- Outbound RestTemplate and WebClient calls logged with masked URLs.
 
-To switch a project to Log4j2, exclude Spring Boot's default logging starter and add
-`spring-boot-starter-log4j2`:
+**Metrics and performance** — [Metrics guide](docs/METRICS.md)
+- JVM and HTTP metrics exported over OTLP through Micrometer.
+- Slow SQL queries logged at WARN; `@Timed` for slow methods; `@AlertOnFailure` failure counters.
 
-```xml
-<dependency>
-    <groupId>io.github.rylxes</groupId>
-    <artifactId>signoz-spring-boot3-starter</artifactId>
-    <version>1.1.0</version>
-    <exclusions>
-        <exclusion>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-logging</artifactId>
-        </exclusion>
-    </exclusions>
-</dependency>
-
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-log4j2</artifactId>
-</dependency>
-```
-
-Exclude `spring-boot-starter-logging` from every other starter that pulls it in as
-well (as with any Spring Boot Log4j2 setup), so Logback and `log4j-to-slf4j` are not
-on the classpath.
-
-> With the OpenTelemetry Java agent exporting logs, the starter leaves log export to
-> the agent on either backend and warns if masking rules are configured, since the
-> agent's appenders do not mask. Set `OTEL_INSTRUMENTATION_LOGBACK_APPENDER_ENABLED=false`
-> or `OTEL_INSTRUMENTATION_LOG4J_APPENDER_ENABLED=false` to let the starter export instead.
+**Developer tools** — [Annotations guide](docs/ANNOTATIONS.md)
+- `@SigNozLog` injects a logger at compile time, like Lombok's `@Slf4j`.
+- `@AuditLog` publishes a structured audit event (actor, action, outcome) for each call.
 
 ---
 
-## OpenTelemetry Java Agent Support
+## Where telemetry goes
 
-The starter automatically detects the [OpenTelemetry Java Agent](https://opentelemetry.io/docs/zero-code/java/agent/)
-(`opentelemetry-javaagent.jar`). When the agent is present, the starter **defers OTLP export
-to the agent** and focuses on app-level features only.
+The default is a self-hosted SigNoz collector on `localhost:4317`. Everything else is a few lines
+of configuration, covered in [Exporting telemetry](docs/EXPORTING.md):
 
-| Component | Agent present | Agent absent |
-|-----------|:---:|:---:|
-| JSON logging / masking | Active | Active |
-| HTTP request logging | Active | Active |
-| Audit trail (`@AuditLog`) | Active | Active |
-| `@Traced` spans | Uses agent's tracer | Uses starter's tracer |
-| OTLP log export | Skipped (agent handles it) | Active |
-| OTLP trace export | Skipped (agent handles it) | Active |
-| OTLP metrics export | Skipped (agent handles it) | Active |
-| Trace-ID in MDC (`trace_id`, `span_id`, `trace_flags`) | From agent's active span | From inbound `traceparent`/`X-Request-ID`, else freshly minted |
-| Cross-service trace propagation (HTTP) | Agent propagates W3C `traceparent` | Starter propagates `traceparent` + `X-Request-ID` via RestTemplate / WebClient interceptors |
-| Cross-service trace propagation (Kafka) | Agent propagates | Starter `TracingProducerInterceptor` / `TracingConsumerInterceptor` |
-| Cross-service trace propagation (SQS) | Agent propagates | Starter `TracingSqsRequestHandler` + `@SqsListener` aspect |
-| Cross-service trace propagation (gRPC) | Agent propagates | Starter `TracingGrpcClientInterceptor` / `ServerInterceptor` |
-| Cross-service trace propagation (WebSocket / STOMP) | Agent propagates | Starter `ChannelInterceptor` + handshake interceptor |
+| Target | What to set |
+|---|---|
+| Self-hosted SigNoz | `signoz.endpoint` |
+| [SigNoz Cloud](docs/EXPORTING.md#signoz-cloud) | `signoz.endpoint` + `signoz.headers.signoz-ingestion-key` |
+| [OpenTelemetry Java agent](docs/EXPORTING.md#with-the-opentelemetry-java-agent) | Nothing: the agent exports, the starter keeps its log, masking and audit features |
+| [Grafana Cloud](docs/EXPORTING.md#grafana-cloud) | `signoz.exporter.backend: grafana-cloud` + Basic auth |
+| [Self-hosted Loki / Tempo / Mimir](docs/EXPORTING.md#self-hosted-grafana-stack) | Per-signal endpoints under `signoz.exporter.*` |
+| [Different backend per environment](docs/EXPORTING.md#different-backends-per-environment) | One Spring profile per backend |
 
-**Recommended setup** — use the agent as the primary OTLP exporter, with the starter providing
-app-level features:
-
-```dockerfile
-# Dockerfile
-RUN wget https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar
-CMD java -javaagent:opentelemetry-javaagent.jar -jar my-app.jar
-```
-
-```yaml
-# application.yml — no endpoint/headers needed, agent handles export
-signoz:
-  service-name: my-app
-  logging:
-    mask-enabled: true
-```
-
-Set the agent's export config via environment variables (e.g. in K8s):
-
-```yaml
-env:
-  - name: OTEL_EXPORTER_OTLP_ENDPOINT
-    value: "https://ingest.us.signoz.cloud:443"
-  - name: OTEL_EXPORTER_OTLP_HEADERS
-    value: "signoz-ingestion-key=<your-key>"
-  - name: OTEL_SERVICE_NAME
-    value: "my-app"
-```
-
----
-
-## SigNoz Cloud (without agent)
-
-When running **without** the OTEL agent, the starter exports directly to SigNoz.
-For [SigNoz Cloud](https://signoz.io/docs/cloud/), configure the ingestion endpoint
-and authentication header:
+SigNoz Cloud, for example:
 
 ```yaml
 signoz:
   endpoint: https://ingest.us.signoz.cloud:443
   service-name: my-app
-  service-version: 1.0.0
-  environment: production
-  headers:
-    signoz-ingestion-key: <your-ingestion-key>
-```
-
-The `signoz.headers` map supports any custom headers. Each header is added to all
-OTLP export requests (logs, traces, and metrics). Find your ingestion key in
-**SigNoz Cloud > Settings > Ingestion**.
-
----
-
-## Grafana (Loki, Tempo, Mimir)
-
-The same starter exports to Grafana. Logs go to Loki, traces to Tempo and metrics to
-Mimir, all over OTLP, which Grafana Cloud and Loki 3.x accept natively. Nothing else in
-your setup changes: masking, JSON console output, trace propagation and annotations work
-the same.
-
-**Grafana Cloud.** Take the OTLP endpoint, instance ID and an access token with write
-scopes from your stack's OpenTelemetry (OTLP) connection details in the Grafana Cloud portal:
-
-```yaml
-signoz:
-  endpoint: https://otlp-gateway-prod-eu-west-2.grafana.net/otlp
-  service-name: my-app
-  environment: production
-  exporter:
-    backend: grafana-cloud          # OTLP over HTTP; the gateway has no gRPC
-    basic-auth:
-      username: 123456              # instance ID
-      password: ${GRAFANA_CLOUD_TOKEN}
-```
-
-Logs are sent to `…/otlp/v1/logs`, traces to `…/otlp/v1/traces` and metrics to
-`…/otlp/v1/metrics`.
-
-**Self-hosted Grafana stack.** Point each signal at its backend, or send everything to
-Grafana Alloy or an OpenTelemetry Collector:
-
-```yaml
-signoz:
-  exporter:
-    backend: otlp
-    protocol: http/protobuf
-    logs-endpoint: http://loki:3100/otlp/v1/logs
-    traces-endpoint: http://tempo:4318/v1/traces
-    metrics-endpoint: http://mimir:9009/otlp/v1/metrics
-```
-
-**Logs linked to traces.** Every exported log record carries its trace and span IDs
-(from the active request, even without the OTel agent), so Grafana's "Logs for this
-span" and Loki → Tempo links work out of the box. `service.name`, `service.version` and
-`deployment.environment` are sent as resource attributes; by default Loki indexes
-`service.name` and `deployment.environment` as labels and keeps the rest, including MDC
-fields (`mdc_*`), as structured metadata.
-
-The startup summary logs the resolved export settings, e.g.
-`export: backend=grafana-cloud, protocol=http/protobuf, logs=…/otlp/v1/logs, … auth=yes`
-(credentials are never printed). See `signoz.exporter.*` in the
-[configuration reference](docs/CONFIGURATION.md).
-
----
-
-## Different Backends per Environment
-
-One application can export to Grafana in one environment and SigNoz in another, for
-example dev → Grafana Cloud and prod → SigNoz Cloud. All export settings are ordinary
-Spring properties, so put each backend in its own profile:
-
-```yaml
-# application.yml (shared)
-signoz:
-  service-name: orders
----
-spring.config.activate.on-profile: prod
-signoz:
-  endpoint: https://ingest.eu.signoz.cloud:443
   headers:
     signoz-ingestion-key: ${SIGNOZ_INGESTION_KEY}
----
-spring.config.activate.on-profile: dev
-signoz:
-  endpoint: https://otlp-gateway-prod-eu-west-2.grafana.net/otlp
-  exporter:
-    backend: grafana-cloud
-    basic-auth:
-      username: ${GRAFANA_INSTANCE_ID}
-      password: ${GRAFANA_CLOUD_TOKEN}
-```
-
-Or set the same keys as environment variables per deployment (`SIGNOZ_ENDPOINT`,
-`SIGNOZ_EXPORTER_BACKEND`, `SIGNOZ_EXPORTER_BASICAUTH_PASSWORD`, …).
-
-Keep `signoz.headers` in the SigNoz profile. Spring merges map properties across
-profiles, so headers in the shared file reach every environment. As a safeguard, the
-SigNoz-only `signoz-ingestion-key` header is never sent when `signoz.exporter.backend`
-is not `signoz` (a warning is logged once).
-
----
-
-## Agentless Trace Propagation
-
-You don't need the OpenTelemetry Java Agent to get **end-to-end log correlation**
-across services. As long as the starter is on every hop, a single `trace_id` /
-`requestId` flows through the entire request path and lands in every log line —
-making "find all logs for this incident" a single SigNoz query.
-
-**How it works.** `TraceIdMdcFilter` chooses the request's identity in this
-priority order:
-
-1. **Active OTEL span** — when the agent (or SDK) is present, its
-   `traceId`/`spanId`/`traceFlags` are used.
-2. **Inbound W3C `traceparent` header** — validated (`00-<32hex>-<16hex>-<2hex>`),
-   the inbound `traceId` is reused and a fresh 16-hex `spanId` is minted for this
-   hop. Flags are preserved.
-3. **Inbound `X-Request-ID` header** — agentless fallback for callers that don't
-   speak W3C. Normalised to 32 hex characters for `traceparent` compatibility.
-4. **Freshly minted IDs** — when we're the edge of the system.
-
-The filter then writes **both** `traceparent` and `X-Request-ID` on the response,
-and populates MDC with `requestId` plus the OTel-native `trace_id`, `span_id`,
-`trace_flags` (omitted when an agent owns them) — cleared in `finally`. The Kafka,
-SQS, gRPC and STOMP consumers write the same keys, so one SigNoz query finds a
-trace's logs whatever protocol each hop used.
-
-> **Upgrading from 1.0.11 or earlier:** the messaging and RPC consumers used to
-> write camelCase `traceId` / `spanId` / `traceFlags` (the HTTP filter switched earlier).
-> Update log patterns such as `%X{traceId}` and saved SigNoz queries to the
-> snake_case names. The starter still *reads* the camelCase keys as a fallback, so
-> application code that writes them keeps propagating.
-
-**Outbound propagation.** `TracingRestTemplateInterceptor` and
-`TracingWebClientFilter` inject `traceparent` + `X-Request-ID` on every outbound
-call. When an OTEL span is active they read from the `SpanContext`; otherwise
-they fall back to MDC values written by the filter. No agent required.
-
-**What you get vs. what you don't.** This gives you log-level correlation:
-filter by `trace_id=abc…` in SigNoz and see every log across the whole
-transaction. You do **not** get span waterfalls, timing per hop, or the SigNoz
-trace view — those need actual spans, which means either the OTEL Java Agent,
-the [OpenTelemetry Spring Boot Starter](https://opentelemetry.io/docs/zero-code/java/spring-boot-starter/),
-or Spring Cloud Sleuth with the OTEL bridge. The filter is additive: when you
-add the agent later, its trace IDs take priority and the MDC fallback becomes a
-no-op.
-
-> **Deployment tip:** end-to-end correlation only works when every service on
-> the request path participates. Either install the starter on all of them, or
-> make sure each service honours inbound `traceparent` and forwards it on
-> outbound calls.
-
-> **Reactive caveat:** in pure reactive `WebClient` chains, MDC is usually empty
-> because Reactor doesn't copy thread-locals into its context. Servlet /
-> blocking callers are unaffected. If you need full reactive correlation,
-> install the OTEL agent or bridge MDC into `ContextView` yourself.
-
----
-
-## Annotations Guide
-
-### `@SigNozLog` — Compile-time logger injection
-
-Annotate any class to have a `log` field injected at compile time. No more boilerplate `private static final Logger log = ...`.
-
-```java
-import io.signoz.springboot.annotation.SigNozLog;
-
-@SigNozLog
-@Service
-public class PaymentService {
-    // 'log' is available — injected by the annotation processor
-    public void process(String orderId) {
-        log.info("Processing payment for order {}", orderId);
-    }
-}
-```
-
-> **Note:** `@SigNozLog` uses Java annotation processing. The starter includes the processor, but
-> dependency POMs cannot add compiler JVM flags to consuming builds. On Java 9+, configure the
-> required `--add-exports` options if your compiler blocks `jdk.compiler` internals; otherwise the
-> processor emits a warning and you can declare `log` manually.
-
----
-
-### `@Masked` — Serialization-time masking
-
-Annotate sensitive method parameters as documentation for masking intent. Runtime business arguments
-are not changed; masking is applied when SigNoz serializes logs, audit entries, headers, and JSON
-payloads.
-
-```java
-@Service
-public class UserService {
-    public void createUser(String username, @Masked String password) {
-        // password remains the real value for business logic.
-        log.info("Creating user: {}", username);
-    }
-
-    // Partial masking is applied by SigNoz serializers for matching fields/payloads.
-    public void charge(@Masked(strategy = Masked.MaskingStrategy.PARTIAL) String cardNumber) {
-        log.info("Charging card ending {}", cardNumber);
-    }
-}
-```
-
-Built-in fields that are **always** masked: `password`, `passwd`, `secret`,
-`token`, `apikey`, `api_key`, `creditcard`, `cardnumber`, `cvv`, `ssn`, `authorization`,
-`x-api-key`, `x-auth-token`, `access_token`,
-`refresh_token`, `id_token`, `client_secret`.
-
-Names match ignoring case, `_`, `-` and `.`, so `access_token` also covers `accessToken` and
-`access-token`. Any other name ending in `token`, `secret`, `password`, `passwd`, `apikey`,
-`signature` or `privatekey` is masked too (`auth_token`, `clientSecret`, `X-Amz-Signature`);
-change that list with `signoz.logging.masked-field-suffixes`, or set it to `[]` to turn it off.
-
-Add your own fields in `application.yml`:
-
-```yaml
-signoz:
-  logging:
-    masked-fields:
-      - myPrivateField
-      - internalSecret
 ```
 
 ---
 
-### `@Traced` — OpenTelemetry span creation
+## What's automatic and what needs wiring
 
-Wrap any Spring-managed method in an OTel span. Tags are key=value pairs.
+Most features need nothing beyond the dependency. A few integrations need a one-time line of setup,
+because the starter can't attach itself to objects you build yourself:
 
-```java
-@Traced(operationName = "checkout", tags = {"domain=payment", "version=v2"})
-public Order checkout(Cart cart) {
-    // OTel span "checkout" is automatically created and closed
-    return orderService.create(cart);
-}
-```
-
-Class-level `@Traced` applies to all public methods:
-
-```java
-@Traced(operationName = "inventory")
-@Service
-public class InventoryService {
-    public List<Item> findAvailable() { ... }  // traced as "inventory"
-    public void restock(Item item) { ... }      // traced as "inventory"
-}
-```
-
----
-
-### `@AuditLog` — Structured audit trail
-
-Publishes an `AuditEvent` to the Spring `ApplicationEventPublisher` on every invocation. The actor is extracted from `SecurityContextHolder` (if Spring Security is present).
-
-```java
-@AuditLog(action = "USER_LOGIN", resourceType = "User", captureArgs = false)
-public AuthResult login(String username, String password) {
-    // AuditEvent published: action=USER_LOGIN, outcome=SUCCESS/FAILURE
-    return authProvider.authenticate(username, password);
-}
-
-@AuditLog(action = "DELETE_ORDER", resourceType = "Order", resourceId = "#orderId")
-public void deleteOrder(Long orderId) {
-    // resourceId resolved from the 'orderId' parameter via SpEL
-    orderRepository.deleteById(orderId);
-}
-```
-
-The `SigNozAuditHandler` logs each event as a structured SLF4J entry on the `SIGNOZ_AUDIT` logger.
-Listen to `AuditEvent` in your own `@EventListener` to add custom handling.
-
----
-
-### `@Timed` — Method profiling
-
-Measure any method's execution time. Logs duration at INFO, WARN for slow methods,
-and optionally publishes a Micrometer Timer metric.
-
-```java
-@Timed("checkout.process")
-public Order checkout(Cart cart) {
-    // Logs: [SigNoz] Timed checkout.process completed in 142ms
-    // If > 1000ms: [SigNoz] SLOW method checkout.process took 2341ms (threshold: 1000ms)
-    return orderService.create(cart);
-}
-```
-
-Configure the slow threshold:
-
-```yaml
-signoz:
-  timed:
-    slow-threshold-ms: 500   # default: 1000
-```
-
----
-
-### `@AlertOnFailure` — Failure metrics
-
-Increment a Micrometer Counter every time a method throws an exception.
-Use SigNoz dashboards to alert on counter spikes.
-
-```java
-@AlertOnFailure(metric = "payment.failures")
-public PaymentResult charge(String cardToken, BigDecimal amount) {
-    // On exception: counter "payment.failures" incremented with tags
-    // class=PaymentService, method=charge, exception=PaymentDeclinedException
-    return gateway.charge(cardToken, amount);
-}
-```
-
----
-
-## Outbound HTTP Tracing
-
-RestTemplate and WebClient calls are automatically traced. The starter injects a
-W3C `traceparent` header and a matching `X-Request-ID`, and logs every outbound
-request.
-
-```
-[SigNoz] Outbound GET https://api.example.com/users/123 -> 200 in 87ms
-```
-
-The identity comes from whichever of these is available:
-
-1. The active OTEL `SpanContext` (agent or SDK path).
-2. For `WebClient` in a WebFlux app: the request's IDs in the Reactor context,
-   stored there by [`TraceIdWebFilter`](#webflux-reactive-applications), so they
-   survive thread hops.
-3. MDC values populated by [`TraceIdMdcFilter`](#agentless-trace-propagation)
-   (`trace_id` / `span_id` / `trace_flags`, falling back to the legacy
-   `traceId` / `spanId` / `traceFlags` keys) — so header propagation still works
-   end-to-end in fully agentless deployments.
-
-```yaml
-signoz:
-  outbound:
-    enabled: true           # default
-    log-requests: true      # log outbound calls
-    propagate-headers: true # inject traceparent + X-Request-ID
-```
-
----
-
-## Kafka Trace Propagation
-
-The starter provides Kafka interceptors that propagate trace context across message queues.
-
-Add them to your Kafka producer/consumer config:
-
-```yaml
-spring:
-  kafka:
-    producer:
-      properties:
-        interceptor.classes: io.signoz.springboot.messaging.TracingProducerInterceptor
-    consumer:
-      properties:
-        interceptor.classes: io.signoz.springboot.messaging.TracingConsumerInterceptor
-```
-
-The producer injects `traceparent` (plus legacy `traceId` / `spanId` headers for
-consumers on older versions) into Kafka record headers. It reads the active OTel
-span, or, without an agent, the MDC written by the HTTP filters. The consumer
-prefers `traceparent`, falls back to the legacy headers, and writes `trace_id` /
-`span_id` / `trace_flags` into the MDC so downstream logs are correlated. With the
-OTel Java agent present, the consumer leaves the MDC to the agent's Kafka
-instrumentation.
-
----
-
-## SQS Trace Propagation
-
-> **Agent-aware**: when the OpenTelemetry Java Agent is detected on the JVM,
-> the agent owns SQS instrumentation and these beans are skipped automatically.
-> No configuration needed.
-
-The starter exposes a `TracingSqsRequestHandler` (AWS SDK v1) and an AOP aspect
-that runs around any method annotated `@SqsListener`. Together they put the W3C
-`traceparent` on the wire and pull it back into MDC at the consumer.
-
-**Producer wiring** — attach the request handler to your SQS client:
-
-```java
-@Bean
-AmazonSQSAsync sqs(TracingSqsRequestHandler tracingHandler) {
-    return AmazonSQSAsyncClientBuilder.standard()
-        .withRequestHandlers(tracingHandler)   // ← add this line
-        .withRegion(Regions.EU_WEST_1)
-        .build();
-}
-```
-
-**Consumer wiring** — automatic. The starter auto-detects which `@SqsListener`
-annotation flavor is on your classpath and registers the matching aspect:
-
-| `@SqsListener` package | Library |
+| Feature | Setup |
 |---|---|
-| `io.awspring.cloud.messaging.listener.annotation` | `io.awspring.cloud:spring-cloud-aws-messaging` 2.x |
-| `io.awspring.cloud.sqs.annotation` | `io.awspring.cloud:spring-cloud-aws-sqs` 3.x |
-| `org.springframework.cloud.aws.messaging.listener.annotation` | legacy `spring-cloud-starter-aws-messaging` |
+| JSON logs, masking, OTLP export, HTTP access logs, trace IDs in the MDC, user context | None |
+| Outbound RestTemplate / WebClient tracing | None, **if** you build clients from Spring Boot's `RestTemplateBuilder` or `WebClient.Builder` bean. A `new RestTemplate()` isn't traced. [Details](docs/TRACING.md#outbound-http) |
+| `@Async` MDC propagation | None for Spring Boot's own executor. Executors you create need the `TracingTaskDecorator`. [Details](docs/TRACING.md#async-threads) |
+| Kafka | Add the two interceptor classes to `spring.kafka.*.properties`. [Details](docs/TRACING.md#kafka) |
+| SQS | Producer: add `TracingSqsRequestHandler` to your SQS client. Consumer: none. [Details](docs/TRACING.md#sqs) |
+| gRPC | Add the client and server interceptors to your channel and server. [Details](docs/TRACING.md#grpc) |
+| WebSocket / STOMP | Frames: none. Handshake: add `TracingWebSocketHandshakeInterceptor`. [Details](docs/TRACING.md#websocket--stomp) |
+| Metrics | Add `micrometer-registry-otlp` (and Actuator for HTTP metrics). [Details](docs/METRICS.md#jvm-and-http-metrics) |
+| `@SigNozLog` on Java 9+ | May need `--add-exports` compiler flags. [Details](docs/ANNOTATIONS.md#signozlog--compile-time-logger) |
 
-The aspect extracts trace context from the `Message<?>`, `MessageHeaders`, or
-`@Headers Map<String,Object>` parameter. If your listener takes only a payload,
-trace context cannot be auto-extracted — add a `Message<?>` parameter or call
-`SqsTraceContext.populateMdcFromHeaders(headers)` manually:
-
-```java
-@SqsListener("my-queue")
-public void onMessage(@Payload MyDto body, @Headers Map<String,Object> headers) {
-    // headers now has SqsTraceContext.populateMdcFromHeaders applied automatically
-    log.info("processing"); // logs include the upstream trace_id
-}
-```
-
-Toggles:
-
-```yaml
-signoz:
-  sqs:
-    enabled: true            # default
-    propagate-trace: true    # default
-```
+To turn the whole starter off without removing it, set `signoz.enabled: false`. Every feature also
+has its own switch; see [Customizing](docs/CUSTOMIZING.md).
 
 ---
 
-## gRPC Trace Propagation
+## Documentation
 
-> **Agent-aware**: when the OpenTelemetry Java Agent is detected on the JVM,
-> these beans are skipped — the agent already wires gRPC `ClientInterceptor`
-> and `ServerInterceptor` for you.
-
-Without the agent, the starter exposes two beans:
-
-- `TracingGrpcClientInterceptor` — injects `traceparent` into outgoing
-  `Metadata`.
-- `TracingGrpcServerInterceptor` — extracts `traceparent` from inbound
-  `Metadata` and populates MDC for the duration of the call.
-
-The starter does **not** auto-attach them to a particular gRPC channel /
-server, because gRPC offers no Spring-native equivalent of `RestTemplate
-Customizer`. Wire them yourself:
-
-```java
-@Bean
-ManagedChannel myServiceChannel(TracingGrpcClientInterceptor tracing) {
-    return ManagedChannelBuilder.forAddress("svc-c", 9090)
-        .intercept(tracing)
-        .usePlaintext()
-        .build();
-}
-
-@Bean
-Server grpcServer(TracingGrpcServerInterceptor tracing, MyService service) {
-    return ServerBuilder.forPort(9090)
-        .intercept(tracing)
-        .addService(service)
-        .build();
-}
-```
-
-If you use [`net.devh:grpc-spring-boot-starter`](https://github.com/yidongnan/grpc-spring-boot-starter),
-add `@GrpcGlobalClientInterceptor` / `@GrpcGlobalServerInterceptor` to the bean
-methods that return these and they'll be applied to every channel / server
-automatically.
-
-> **MDC scope caveat**: gRPC may dispatch listener callbacks on a worker thread
-> different from the one that ran `interceptCall`. Wire-side propagation
-> always works; MDC on the user handler thread is best-effort with default
-> executors and may be empty under thread-pool executors. If you need
-> guaranteed MDC inside the handler, capture the trace context from `Metadata`
-> at the start of your method.
-
-Toggles:
-
-```yaml
-signoz:
-  grpc:
-    enabled: true
-    propagate-trace: true
-```
+| Guide | Read it to… |
+|---|---|
+| [Exporting telemetry](docs/EXPORTING.md) | Send data to SigNoz (self-hosted or Cloud), Grafana, or through the OpenTelemetry Java agent |
+| [Logging](docs/LOGGING.md) | Understand the JSON output, MDC fields, masking rules, Log4j2 support, sampling and error IDs |
+| [Tracing and correlation](docs/TRACING.md) | Follow a request across services and protocols, with or without the agent |
+| [Web (Spring MVC and WebFlux)](docs/WEB.md) | Configure HTTP access logs, reactive apps and user context |
+| [Metrics and performance](docs/METRICS.md) | Export metrics and find slow queries and methods |
+| [Annotations](docs/ANNOTATIONS.md) | Use `@SigNozLog`, `@Masked`, `@Traced`, `@AuditLog`, `@Timed` and `@AlertOnFailure` |
+| [Customizing](docs/CUSTOMIZING.md) | Switch features off and replace the starter's beans with your own |
+| [Configuration reference](docs/CONFIGURATION.md) | Look up every `signoz.*` property and its default |
+| [Architecture](docs/ARCHITECTURE.md) | See how the modules, auto-configurations and aspects fit together |
+| [Changelog](CHANGELOG.md) | Check what changed between versions, and how to upgrade |
 
 ---
 
-## WebSocket / STOMP Trace Propagation
+## Contributing
 
-> **Agent-aware**: skipped when the OpenTelemetry Java Agent is detected.
+Contributions are welcome, from people and from AI coding agents.
 
-For STOMP, the starter registers a `WebSocketMessageBrokerConfigurer` that
-attaches a `ChannelInterceptor` to both the client-inbound and client-outbound
-channels:
+- **People:** start with [CONTRIBUTING.md](CONTRIBUTING.md) for setup, build commands, project
+  conventions and the pull request checklist.
+- **AI agents:** read [AGENTS.md](AGENTS.md), a compact list of commands, rules and pitfalls for
+  working in this repository. (Claude Code loads it through [CLAUDE.md](CLAUDE.md).)
 
-- **Inbound** (frame from client → server): reads the `traceparent` STOMP
-  native header and populates MDC.
-- **Outbound** (frame from server → client): reads the active span / MDC and
-  injects `traceparent` into the STOMP frame.
-
-Spring composes multiple `WebSocketMessageBrokerConfigurer` beans additively, so
-this configurer cooperates with any `@EnableWebSocketMessageBroker` config you
-already have — no changes required.
-
-For the WebSocket **handshake** (the HTTP upgrade), the starter exposes a
-`TracingWebSocketHandshakeInterceptor` bean. Attach it to your handler registry:
-
-```java
-@Override
-public void registerStompEndpoints(StompEndpointRegistry registry) {
-    registry.addEndpoint("/ws")
-        .addInterceptors(tracingWebSocketHandshakeInterceptor)   // ← add this
-        .withSockJS();
-}
-```
-
-The handshake interceptor stashes the inbound `traceparent` on the WebSocket
-session attributes; the channel interceptor falls back to that value if a
-specific frame doesn't carry the header.
-
-Raw (non-STOMP) WebSocket per-message propagation is not in scope — embed the
-trace context inside your message envelope and call
-`TraceContextCodec.currentTraceparent()` to obtain it.
-
-Toggles:
-
-```yaml
-signoz:
-  websocket:
-    enabled: true
-    propagate-trace: true
-```
-
----
-
-## Slow Query Detection
-
-Automatically wraps your `DataSource` to time every SQL query. Queries exceeding
-the threshold are logged at WARN with the SQL and duration.
-
-```
-[SigNoz] SLOW QUERY (1247ms > 500ms): SELECT * FROM transactions WHERE created_at > ?
-```
-
-```yaml
-signoz:
-  database:
-    enabled: true
-    slow-query-threshold-ms: 500  # default
-    log-all-queries: false        # set true for development
-    max-query-length: 1000        # truncate long SQL in logs
-```
-
----
-
-## Error Fingerprinting
-
-When logging at ERROR level with a throwable, a stable `errorId` is added to MDC.
-This is a SHA-256 hash of the exception type + top N stack frames, allowing you
-to group identical errors in SigNoz dashboards.
-
-```yaml
-signoz:
-  errors:
-    enabled: true
-    fingerprint-depth: 3  # number of stack frames to hash
-```
-
----
-
-## Async Context Propagation
-
-`@Async` methods and `ExecutorService` tasks lose MDC context (traceId, requestId)
-when switching threads. The starter provides `TracingTaskDecorator` that automatically
-copies MDC to worker threads.
-
-```yaml
-signoz:
-  async:
-    enabled: true  # auto-configures TaskExecutorCustomizer
-```
-
-For raw `ExecutorService`, wrap it manually:
-
-```java
-ExecutorService traced = new TracingExecutorService(Executors.newFixedThreadPool(10));
-```
-
----
-
-## Structured JSON Logging
-
-`SigNozJsonEncoder` (extends `LogstashEncoder`) produces one JSON object per log
-event with `@timestamp`, `message`, `logger`, `thread`, `level`, MDC fields
-(`traceId`, `spanId`, `requestId`, user context, error fingerprint, …), and any
-structured arguments you log.
-
-**Clean by default.** Spring Boot publishes internal bootstrap variables
-(`CONSOLE_LOG_PATTERN`, `CONSOLE_LOG_CHARSET`, `FILE_LOG_PATTERN`,
-`FILE_LOG_CHARSET`, `PID`, …) into the Logback `LoggerContext` so its pattern
-layouts can resolve them. `LogstashEncoder` emits those as top-level JSON fields
-by default — pure noise on every log line. The starter disables that behaviour
-out of the box.
-
-If you intentionally publish custom `LoggerContext` properties and want them on
-every event, opt back in:
-
-```yaml
-signoz:
-  logging:
-    include-context: true   # default: false
-```
-
----
-
-## Log Sampling
-
-Reduce log volume in high-traffic production environments. ERROR and WARN always
-pass; other levels are sampled probabilistically.
-
-```yaml
-signoz:
-  logging:
-    sampling:
-      enabled: true
-      rate: 0.1                    # keep 10% of INFO/DEBUG logs
-      always-log-levels:
-        - ERROR
-        - WARN
-```
-
----
-
-## User Context Enrichment
-
-Automatically extracts user information from Spring Security's `SecurityContext`
-and adds it to MDC. Every log line then includes `userId`, `userEmail`, `userRoles`.
-
-```yaml
-signoz:
-  user-context:
-    enabled: true
-    extract-email: true
-    extract-roles: true
-```
-
-> Requires Spring Security on the classpath. Uses reflection — no hard dependency.
-> In a WebFlux app the same keys are read from `ReactiveSecurityContextHolder` by
-> `UserContextWebFilter`, which runs after Spring Security's filter chain.
-
----
-
-## HTTP Logging
-
-`HttpLoggingFilter` automatically logs every inbound HTTP request and response. Each log entry includes:
-
-- HTTP method and URI
-- Response status code
-- Request duration (ms)
-- Optionally: request/response headers and body
-
-Sensitive headers (`Authorization`, `Cookie`, `X-API-Key`) are masked automatically.
-
-**Exclude paths** from logging (default exclusions: `/actuator/**`, `/health/**`, `/favicon.ico`):
-
-```yaml
-signoz:
-  web:
-    exclude-paths:
-      - /actuator/**
-      - /internal/**
-      - /metrics
-```
-
-**Disable request body logging** to reduce overhead on high-volume endpoints:
-
-```yaml
-signoz:
-  web:
-    log-request-body: false
-    log-response-body: false
-```
-
----
-
-## WebFlux (Reactive) Applications
-
-In a Spring WebFlux application the starter registers reactive `WebFilter`s in
-place of the servlet filters. All `signoz.web.*` and `signoz.user-context.*`
-properties apply unchanged.
-
-| Servlet filter | WebFlux filter | Order |
-|---|---|---|
-| `TraceIdMdcFilter` | `TraceIdWebFilter` | `HIGHEST_PRECEDENCE + 1` |
-| `HttpLoggingFilter` | `HttpLoggingWebFilter` | `HIGHEST_PRECEDENCE + 2` |
-| `UserContextMdcFilter` | `UserContextWebFilter` | `0` (after Spring Security's `-100`) |
-
-What you get per request:
-
-- `X-Request-ID` and `traceparent` response headers, resolved exactly like the
-  servlet filter (active OTel span → inbound `traceparent` → inbound
-  `X-Request-ID` → fresh IDs).
-- One `SIGNOZ_HTTP` access-log line with method, path, query, status, duration,
-  and optionally masked headers and bounded, masked bodies. Failed requests are
-  logged with the status the error handler actually sent (for example 404 for a
-  `ResponseStatusException`), plus `error=<exception class>`.
-- `requestId`, `trace_id`, `span_id`, `trace_flags` (and `userId`, `userEmail`,
-  `userRoles` for authenticated users) in the MDC of your handler's logs, and in
-  the Reactor context under `ReactiveMdc.CONTEXT_KEY`.
-- Outbound `WebClient` calls carry the request's `traceparent` and
-  `X-Request-ID`, even after thread hops.
-
-**MDC across thread hops.** Reactive handlers often continue on another thread
-(`publishOn`, a `WebClient` response, a reactive driver). On **Spring Boot 3** the
-starter registers a context-propagation `ThreadLocalAccessor` for the SigNoz MDC
-and enables Reactor's automatic context propagation (the same switch as
-`spring.reactor.context-propagation=auto`), so every log line in the pipeline
-keeps its IDs. To opt out:
-
-```yaml
-signoz:
-  web:
-    reactive-context-propagation: false
-```
-
-On **Spring Boot 2** (Reactor 3.4 has no automatic propagation), and with the
-switch above off, the MDC is set until the handler's first thread hop. After it,
-log through `ReactiveMdc`, which reads the IDs from the Reactor context:
-
-```java
-return webClient.get().uri("/inventory").retrieve().bodyToMono(Stock.class)
-        .doOnEach(ReactiveMdc.onNext(stock -> log.info("stock {}", stock.count())));
-```
-
----
-
-## Disabling Features
-
-All features can be disabled independently:
-
-| Property | Default | Effect when `false` |
-|----------|---------|---------------------|
-| `signoz.enabled` | `true` | Disables the entire starter |
-| `signoz.tracing.enabled` | `true` | Disables span creation and OTel SDK init |
-| `signoz.logging.mask-enabled` | `true` | Disables all field and message masking |
-| `signoz.web.log-requests` | `true` | Disables HTTP request/response logging |
-| `signoz.audit.enabled` | `true` | Disables `@AuditLog` aspect and handler |
-
-Additional feature toggles:
-
-| Property | Default | Effect when `false` |
-|----------|---------|---------------------|
-| `signoz.timed.enabled` | `true` | Disables `@Timed` profiling |
-| `signoz.alerts.enabled` | `true` | Disables `@AlertOnFailure` counters |
-| `signoz.outbound.enabled` | `true` | Disables outbound HTTP tracing |
-| `signoz.messaging.enabled` | `true` | Disables Kafka trace propagation |
-| `signoz.database.enabled` | `true` | Disables slow query detection |
-| `signoz.user-context.enabled` | `true` | Disables user context enrichment |
-| `signoz.errors.enabled` | `true` | Disables error fingerprinting |
-| `signoz.async.enabled` | `true` | Disables async MDC propagation |
-| `signoz.logging.sampling.enabled` | `false` | Enables log sampling (opt-in) |
-| `signoz.logging.include-context` | `false` | When `true`, re-enables Logback `LoggerContext` properties as top-level JSON fields |
-
----
-
-## Overriding Beans
-
-Every auto-configured bean uses `@ConditionalOnMissingBean`, so you can override any component by
-declaring your own `@Bean` of the same type.
-
-**Custom masking registry** (add custom field strategies at startup):
-
-```java
-@Configuration
-public class MyMaskingConfig {
-
-    @Bean  // replaces the auto-configured MaskingRegistry
-    public MaskingRegistry maskingRegistry(SigNozLoggingProperties props) {
-        MaskingRegistry registry = new MaskingRegistry(props);
-        registry.register("myCustomField", new FullMaskingStrategy());
-        return registry;
-    }
-}
-```
-
-**Custom audit handler** (write to database instead of logs):
-
-```java
-@Configuration
-public class MyAuditConfig {
-
-    @Bean  // replaces SigNozAuditHandler
-    public SigNozAuditHandler auditHandler(AuditRepository repo) {
-        return event -> repo.save(AuditRecord.from(event));
-    }
-}
-```
-
----
-
-## Logback Integration
-
-To include the SigNoz Logback configuration in your own `logback-spring.xml`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<configuration>
-    <include resource="logback-signoz.xml"/>
-
-    <!-- Your additional appenders here -->
-    <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="SIGNOZ_JSON"/>
-    </root>
-</configuration>
-```
-
-The bundled `logback-signoz.xml` activates the JSON encoder and OTLP appender based on the
-`signoz.logging.mode` property (`OTLP` | `JSON` | `BOTH`). It sets
-`<includeContext>false</includeContext>` on the encoder — see
-[Structured JSON Logging](#structured-json-logging) to opt back in.
-
----
-
-## Building the Project
-
-```bash
-# Build all 7 modules — requires JDK 17+ on the PATH (for the SB3 module)
-mvn clean install
-
-# Build only the Java 8 modules (skips SB3)
-mvn clean install -pl signoz-annotations,signoz-annotation-processor,signoz-core,signoz-spring-boot2,signoz-spring-boot2-starter
-```
-
-> **Note:** `signoz-spring-boot3` compiles at Java 17 source level. The rest of the modules
-> compile at Java 8 source level and run on any JDK 8+.
-
----
-
-## Configuration Reference
-
-See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for the full property reference.
-
-## Architecture
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the module dependency diagram, auto-configuration
-load order, and AOP aspect ordering.
+Licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).

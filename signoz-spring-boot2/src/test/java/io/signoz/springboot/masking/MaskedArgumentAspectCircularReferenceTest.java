@@ -52,7 +52,7 @@ class MaskedArgumentAspectCircularReferenceTest {
     }
 
     /**
-     * The "custom masking registry" override documented in the README, reading its field
+     * The "custom masking registry" override documented in docs/CUSTOMIZING.md, reading its field
      * list from a {@code @Component}. Building this bean is part of creating
      * {@code maskedArgumentAspect}, so the call below runs while the aspect is in creation.
      */

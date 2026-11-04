@@ -121,3 +121,8 @@
   event encodes about 30% faster. (#13)
 - Masking tests build planted secrets at runtime so secret scanners don't flag
   them. (#10, #11, #12, #15, #16)
+- Documentation reorganised: the README is now a short landing page, with task-focused
+  guides under `docs/` (exporting, logging, tracing, web, metrics, annotations,
+  customizing). `CONTRIBUTING.md` (for people) and `AGENTS.md` (for AI coding agents)
+  describe how to build, test and contribute. The masking `profiles` and
+  `field-strategies` properties are now documented.
