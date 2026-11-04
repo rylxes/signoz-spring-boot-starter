@@ -58,6 +58,10 @@
 - Malformed MDC values no longer produce an invalid `traceparent` header. (#5)
 - WebFlux: MDC values from one request can no longer leak into another request's
   logs on the same thread. (#4)
+- **Security:** the Logback JSON console output wrote lists and nested values
+  under a sensitive key (for example `kv("token", List.of(a, b))`) in clear, and
+  `token=[a, b]` in a message was masked only up to the first comma. With a
+  custom prefix, arrays and objects were not masked at all. (#13)
 
 ### Internal
 
@@ -68,5 +72,7 @@
   (`TraceIdentity`). (#5)
 - Each Boot module also runs a test suite with Log4j2 as the real logging backend.
   (#6)
+- The Logback JSON encoder no longer masks the message and MDC twice; a typical
+  event encodes about 30% faster. (#13)
 - Masking tests build planted secrets at runtime so secret scanners don't flag
   them. (#10, #11, #12, #15, #16)
