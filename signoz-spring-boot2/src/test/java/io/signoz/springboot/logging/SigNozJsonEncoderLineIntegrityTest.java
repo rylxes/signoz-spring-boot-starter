@@ -30,6 +30,9 @@ class SigNozJsonEncoderLineIntegrityTest {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
+    /** Value planted in a sensitive position; it must never appear in encoded output. */
+    private static final String CANARY = "s3cret";
+
     private LoggerContext loggerContext;
     private SigNozJsonEncoder encoder;
 
@@ -49,9 +52,9 @@ class SigNozJsonEncoderLineIntegrityTest {
 
     @Test
     void passwordAsLastTokenOfMessageKeepsLineValidJson() throws Exception {
-        String line = encode(event("login password=s3cret", null, null, null));
+        String line = encode(event("login password=" + CANARY, null, null, null));
 
-        assertThat(line).doesNotContain("s3cret");
+        assertThat(line).doesNotContain(CANARY);
         JsonNode node = JSON.readTree(line);
         assertThat(node.get("message").asText()).isEqualTo("login password=***");
         assertThat(node.get("level").asText()).isEqualTo("INFO");
@@ -62,12 +65,12 @@ class SigNozJsonEncoderLineIntegrityTest {
     @Test
     void passwordAsLastTokenOfMdcValueKeepsFollowingFields() throws Exception {
         Map<String, String> mdc = new HashMap<String, String>();
-        mdc.put("note", "user password=s3cret");
+        mdc.put("note", "user password=" + CANARY);
         mdc.put("traceId", "4bf92f3577b34da6a3ce929d0e0e4736");
 
         String line = encode(event("request received", null, mdc, null));
 
-        assertThat(line).doesNotContain("s3cret");
+        assertThat(line).doesNotContain(CANARY);
         JsonNode node = JSON.readTree(line);
         assertThat(node.get("note").asText()).isEqualTo("user password=***");
         assertThat(node.get("traceId").asText()).isEqualTo("4bf92f3577b34da6a3ce929d0e0e4736");
@@ -76,9 +79,9 @@ class SigNozJsonEncoderLineIntegrityTest {
 
     @Test
     void escapesInStackTraceAreNotConsumedByMessagePatterns() throws Exception {
-        String line = encode(event("failed", null, null, new IllegalStateException("bad password=s3cret")));
+        String line = encode(event("failed", null, null, new IllegalStateException("bad password=" + CANARY)));
 
-        assertThat(line).doesNotContain("s3cret");
+        assertThat(line).doesNotContain(CANARY);
         JsonNode node = JSON.readTree(line);
         String stackTrace = node.get("stack_trace").asText();
         assertThat(stackTrace).startsWith("java.lang.IllegalStateException: bad password=***\n\tat ");
@@ -88,9 +91,9 @@ class SigNozJsonEncoderLineIntegrityTest {
     @Test
     void sensitiveStructuredArgumentIsMaskedByFieldName() throws Exception {
         String line = encode(event("login {}",
-                new Object[]{StructuredArguments.keyValue("token", "tok-abcdef")}, null, null));
+                new Object[]{StructuredArguments.keyValue("token", CANARY)}, null, null));
 
-        assertThat(line).doesNotContain("tok-abcdef");
+        assertThat(line).doesNotContain(CANARY);
         JsonNode node = JSON.readTree(line);
         assertThat(node.get("token").asText()).isEqualTo("***");
         assertThat(node.get("level").asText()).isEqualTo("INFO");
