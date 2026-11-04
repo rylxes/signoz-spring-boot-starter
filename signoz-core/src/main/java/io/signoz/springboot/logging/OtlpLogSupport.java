@@ -84,11 +84,19 @@ public final class OtlpLogSupport {
                 : spanContext(mdc.get("traceId"), mdc.get("spanId"), mdc.get("traceFlags"));
     }
 
+    private static boolean isTwoHexDigits(String s) {
+        return s != null && s.length() == 2 && isHexDigit(s.charAt(0)) && isHexDigit(s.charAt(1));
+    }
+
+    private static boolean isHexDigit(char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+    }
+
     private static SpanContext spanContext(String traceId, String spanId, String flags) {
         if (traceId == null || spanId == null) {
             return null;
         }
-        TraceFlags traceFlags = flags != null && flags.matches("[0-9a-fA-F]{2}")
+        TraceFlags traceFlags = isTwoHexDigits(flags)
                 ? TraceFlags.fromHex(flags.toLowerCase(java.util.Locale.ROOT), 0) : TraceFlags.getSampled();
         SpanContext ctx = SpanContext.createFromRemoteParent(
                 traceId.toLowerCase(java.util.Locale.ROOT), spanId.toLowerCase(java.util.Locale.ROOT),
