@@ -26,6 +26,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class HttpLoggingWebFilterTest {
 
+    /** Value planted in the request body's password; it must never appear in the log line. */
+    private static final String CANARY = "s3cret";
+
+    /** Value planted in the response body's token: masked in the log, delivered intact to the client. */
+    private static final String TOKEN_CANARY = "t0ken-canary";
+
     private SigNozWebProperties webProps;
     private HttpLoggingWebFilter filter;
     private ListAppender<ILoggingEvent> appender;
@@ -53,13 +59,13 @@ class HttpLoggingWebFilterTest {
         MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.post("/login")
                 .queryParam("tenant", "acme")
                 .contentType(MediaType.APPLICATION_JSON)
-                .body("{\"user\":\"alice\",\"password\":\"hunter2\"}"));
+                .body("{\"user\":\"alice\",\"password\":\"" + CANARY + "\"}"));
 
         WebFilterChain handler = ex -> DataBufferUtils.join(ex.getRequest().getBody())
                 .flatMap(body -> {
                     DataBufferUtils.release(body);
                     ex.getResponse().setStatusCode(HttpStatus.CREATED);
-                    return write(ex, "{\"token\":\"abc123\",\"ok\":true}");
+                    return write(ex, "{\"token\":\"" + TOKEN_CANARY + "\",\"ok\":true}");
                 });
 
         // TraceIdWebFilter runs first in a real app; it supplies the MDC for the log line.
@@ -69,10 +75,10 @@ class HttpLoggingWebFilterTest {
         ILoggingEvent event = appender.list.get(0);
         String line = event.getFormattedMessage();
         assertThat(line).startsWith("HTTP POST /login?tenant=acme status=201 duration=");
-        assertThat(line).contains("requestBody=").contains("\"user\":\"alice\"").doesNotContain("hunter2");
-        assertThat(line).contains("responseBody=").contains("\"ok\":true").doesNotContain("abc123");
+        assertThat(line).contains("requestBody=").contains("\"user\":\"alice\"").doesNotContain(CANARY);
+        assertThat(line).contains("responseBody=").contains("\"ok\":true").doesNotContain(TOKEN_CANARY);
         assertThat(event.getMDCPropertyMap()).containsKeys("requestId", "trace_id", "span_id");
-        assertThat(exchange.getResponse().getBodyAsString().block()).contains("abc123");
+        assertThat(exchange.getResponse().getBodyAsString().block()).contains(TOKEN_CANARY);
     }
 
     @Test
