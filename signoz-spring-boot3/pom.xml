@@ -97,13 +97,6 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- Log4j2 backend support (optional — only used when log4j-core is the logging backend) -->
-        <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-core</artifactId>
-            <optional>true</optional>
-        </dependency>
-
         <!-- Restores the SigNoz MDC on every Reactor thread hop in WebFlux apps
              (ThreadLocalAccessor + Hooks.enableAutomaticContextPropagation). Tiny, no
              transitive dependencies; inert outside reactive web applications. -->
@@ -111,6 +104,13 @@
             <groupId>io.micrometer</groupId>
             <artifactId>context-propagation</artifactId>
             <version>${context-propagation.version}</version>
+        </dependency>
+
+        <!-- Log4j2 backend support (optional — only used when log4j-core is the logging backend) -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <optional>true</optional>
         </dependency>
 
         <!-- Config processor for IDE autocomplete -->
