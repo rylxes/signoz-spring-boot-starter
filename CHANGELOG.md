@@ -76,7 +76,9 @@
   exception that quoted the URL repeated it. `signoz.outbound.log-requests` is on by default.
   The logged URL now has sensitive query parameters masked the same way as inbound requests,
   user info (`https://user:pass@host`) replaced with `***` and the fragment dropped; the URL
-  inside a logged exception message is masked too.
+  inside a logged exception message is masked too. A `TracingRestTemplateInterceptor` or
+  `TracingWebClientFilter` built without a `MaskingRegistry` (for example through its
+  single-argument constructor) masks with the default rules instead of logging the query as is.
 - **WebClient on Spring Boot 3.2+:** with `signoz.outbound.log-requests` on (the
   default), every successful `WebClient` call failed with `NoSuchMethodError:
   ClientResponse.rawStatusCode()`, because Spring Framework 6.1 removed that method. The

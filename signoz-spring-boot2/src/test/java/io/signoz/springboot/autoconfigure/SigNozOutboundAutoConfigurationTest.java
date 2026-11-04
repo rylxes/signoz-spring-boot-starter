@@ -33,7 +33,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 /**
  * The outbound clients only mask the query strings they log if the auto-configuration hands them
- * the application's {@link MaskingRegistry}; a client built without one logs the query as is.
+ * the application's {@link MaskingRegistry}; a client built without one falls back to the default
+ * rules and ignores {@code signoz.logging.*} customisations.
  *
  * <p>The status tests make a real call through a customized client against a response built by
  * Spring, not a mock, so they fail if the client calls a status method this Spring version no
