@@ -130,11 +130,12 @@ class SigNozJsonEncoderLineIntegrityTest {
     }
 
     /**
-     * With a prefix the line is not plain JSON and the encoder falls back to regexes over the raw
-     * text. JSON embedded in the message must still be masked there, before LogstashEncoder escapes it.
+     * With a prefix the line is not plain JSON. The object after the prefix must still get the
+     * per-value pass: regexes over the raw line miss JSON escaped inside the message and cannot see
+     * a list under a sensitive key at all.
      */
     @Test
-    void nonJsonPrefixFallbackStillMasksJsonEmbeddedInMessage() throws Exception {
+    void prefixedLineIsStillMaskedValueByValue() throws Exception {
         SigNozJsonEncoder prefixed = new SigNozJsonEncoder();
         prefixed.setContext(loggerContext);
         prefixed.setMaskingRegistry(new MaskingRegistry(new SigNozLoggingProperties()));
@@ -145,16 +146,21 @@ class SigNozJsonEncoderLineIntegrityTest {
         prefixed.setPrefix(prefix);
         prefixed.start();
         try {
-            String line = new String(prefixed.encode(event("login {}",
-                    new Object[]{"{\"user\":\"alice\",\"token\":\"tok-dddd4444\"}"}, null, null)),
-                    StandardCharsets.UTF_8);
+            String line = new String(prefixed.encode(event("login {} {}", new Object[]{
+                    "{\"user\":\"alice\",\"token\":\"tok-dddd4444\"}",
+                    StructuredArguments.keyValue("token", Arrays.asList("tok-eeee5555", "tok-ffff6666"))},
+                    null, null)), StandardCharsets.UTF_8);
 
-            assertThat(line).startsWith("APP {").doesNotContain("tok-dddd4444").contains("alice");
+            assertThat(line).startsWith("APP {").contains("alice")
+                    .doesNotContain("tok-dddd4444").doesNotContain("tok-eeee5555").doesNotContain("tok-ffff6666");
             JsonNode node = JSON.readTree(line.substring("APP ".length()));
             assertThat(node.get("message").asText())
-                    .isEqualTo("login {\"user\":\"alice\",\"token\":\"***\"}");
+                    .isEqualTo("login {\"user\":\"alice\",\"token\":\"***\"} token=***");
+            assertThat(node.get("token").get(0).asText()).isEqualTo("***");
+            assertThat(node.get("level").asText()).isEqualTo("INFO");
         } finally {
             prefixed.stop();
+            prefix.stop();
         }
     }
 
