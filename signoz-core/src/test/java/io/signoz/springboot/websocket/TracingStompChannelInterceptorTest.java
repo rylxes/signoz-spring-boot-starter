@@ -157,4 +157,56 @@ class TracingStompChannelInterceptorTest {
             worker.shutdownNow();
         }
     }
+
+    /**
+     * Frames the broker sends to clients (CONNECTED, and MESSAGE to subscribers) are built from
+     * {@code SimpMessageHeaderAccessor} messages that Spring's {@code StompSubProtocolHandler}
+     * converts into STOMP frames itself. Re-wrapping them as {@code StompHeaderAccessor} skipped
+     * that conversion: the handler failed with "Missing STOMP command", dropped the frame and
+     * closed the session. This runs the interceptor's output through the real handler.
+     */
+    @Test
+    void outboundBrokerFramesStillReachTheClientWithATraceInTheMdc() throws Exception {
+        MDC.put("trace_id", "4bf92f3577b34da6a3ce929d0e0e4736");
+        MDC.put("span_id", "00f067aa0ba902b7");
+        MDC.put("trace_flags", "01");
+        TracingStompChannelInterceptor outbound =
+                new TracingStompChannelInterceptor(TracingStompChannelInterceptor.Direction.OUTBOUND);
+        org.springframework.web.socket.messaging.StompSubProtocolHandler stomp =
+                new org.springframework.web.socket.messaging.StompSubProtocolHandler();
+        org.springframework.web.socket.WebSocketSession session = mock(org.springframework.web.socket.WebSocketSession.class);
+        org.mockito.Mockito.when(session.getId()).thenReturn("s1");
+        org.mockito.Mockito.when(session.isOpen()).thenReturn(true);
+        org.mockito.ArgumentCaptor<org.springframework.web.socket.WebSocketMessage> sent =
+                org.mockito.ArgumentCaptor.forClass(org.springframework.web.socket.WebSocketMessage.class);
+
+        // CONNECT_ACK, as SimpleBrokerMessageHandler sends it in reply to CONNECT.
+        StompHeaderAccessor connect = StompHeaderAccessor.create(StompCommand.CONNECT);
+        connect.setAcceptVersion("1.2");
+        org.springframework.messaging.simp.SimpMessageHeaderAccessor ack =
+                org.springframework.messaging.simp.SimpMessageHeaderAccessor.create(
+                        org.springframework.messaging.simp.SimpMessageType.CONNECT_ACK);
+        ack.setHeader(org.springframework.messaging.simp.SimpMessageHeaderAccessor.CONNECT_MESSAGE_HEADER,
+                MessageBuilder.createMessage(new byte[0], connect.getMessageHeaders()));
+        ack.setSessionId("s1");
+        stomp.handleMessageToClient(session, outbound.preSend(
+                MessageBuilder.createMessage(new byte[0], ack.getMessageHeaders()), mock(MessageChannel.class)));
+
+        // MESSAGE to a subscriber, as the broker sends it for convertAndSend("/topic/...").
+        org.springframework.messaging.simp.SimpMessageHeaderAccessor message =
+                org.springframework.messaging.simp.SimpMessageHeaderAccessor.create(
+                        org.springframework.messaging.simp.SimpMessageType.MESSAGE);
+        message.setSessionId("s1");
+        message.setSubscriptionId("sub-1");
+        message.setDestination("/topic/orders");
+        stomp.handleMessageToClient(session, outbound.preSend(
+                MessageBuilder.createMessage("hi".getBytes("UTF-8"), message.getMessageHeaders()), mock(MessageChannel.class)));
+
+        org.mockito.Mockito.verify(session, org.mockito.Mockito.times(2)).sendMessage(sent.capture());
+        org.mockito.Mockito.verify(session, org.mockito.Mockito.never()).close(org.mockito.ArgumentMatchers.any());
+        assertThat(sent.getAllValues().get(0).getPayload().toString()).startsWith("CONNECTED");
+        assertThat(sent.getAllValues().get(1).getPayload().toString()).startsWith("MESSAGE")
+                .contains("traceparent:00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+                .contains("destination:/topic/orders");
+    }
 }

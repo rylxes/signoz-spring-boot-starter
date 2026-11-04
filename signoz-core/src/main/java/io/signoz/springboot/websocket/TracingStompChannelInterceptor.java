@@ -12,6 +12,7 @@ import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.ExecutorChannelInterceptor;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.messaging.support.MessageHeaderAccessor;
+import org.springframework.messaging.support.NativeMessageHeaderAccessor;
 
 /**
  * STOMP {@link ChannelInterceptor} that propagates trace context across STOMP
@@ -59,9 +60,8 @@ public class TracingStompChannelInterceptor implements ExecutorChannelIntercepto
             }
             return message;
         }
-        // OUTBOUND: returning a new Message with mutable headers wrapped via
-        // StompHeaderAccessor.wrap() — required because messages produced by
-        // the broker channel typically carry immutable headers.
+        // OUTBOUND: returns a new Message with a mutable copy of the headers, because messages
+        // produced by the broker channel typically carry immutable ones.
         return injectOutbound(message);
     }
 
@@ -135,12 +135,20 @@ public class TracingStompChannelInterceptor implements ExecutorChannelIntercepto
         if (traceparent == null) {
             return message;
         }
-        StompHeaderAccessor accessor = StompHeaderAccessor.wrap(message);
-        accessor.setNativeHeader(TraceContextCodec.TRACEPARENT_HEADER, traceparent);
+        // Keep the message's own accessor type. Frames the broker sends (CONNECT_ACK, MESSAGE to
+        // subscribers) carry a SimpMessageHeaderAccessor that StompSubProtocolHandler turns into
+        // a STOMP frame itself; re-wrapping them as StompHeaderAccessor made it skip that step,
+        // fail with "Missing STOMP command", drop the frame and close the session.
+        MessageHeaderAccessor accessor = MessageHeaderAccessor.getMutableAccessor(message);
+        if (!(accessor instanceof NativeMessageHeaderAccessor)) {
+            return message;
+        }
+        NativeMessageHeaderAccessor nativeAccessor = (NativeMessageHeaderAccessor) accessor;
+        nativeAccessor.setNativeHeader(TraceContextCodec.TRACEPARENT_HEADER, traceparent);
         String requestId = MDC.get("requestId");
         if (requestId != null && !requestId.isEmpty()) {
-            accessor.setNativeHeader("X-Request-ID", requestId);
+            nativeAccessor.setNativeHeader("X-Request-ID", requestId);
         }
-        return MessageBuilder.createMessage(message.getPayload(), accessor.getMessageHeaders());
+        return MessageBuilder.createMessage(message.getPayload(), nativeAccessor.getMessageHeaders());
     }
 }

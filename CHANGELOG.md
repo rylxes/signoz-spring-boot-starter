@@ -137,6 +137,14 @@
   channel runs handlers on its own executor, but the MDC was set on the thread that sent the
   frame into the channel. It is now also set on the handler's thread, from the frame's
   `traceparent` or the one captured at the handshake.
+- **STOMP frames from the broker were dropped while a trace was active.** To add
+  `traceparent`, the outbound interceptor re-wrapped each server-to-client message as a STOMP
+  message. Spring only converts broker messages (the CONNECTED reply, MESSAGE frames to
+  subscribers) when they are not already STOMP messages, so with a trace in the MDC it failed
+  with "Missing STOMP command", dropped the frame and closed the session. A
+  `SimpMessagingTemplate.convertAndSend(...)` from an HTTP request, which has the request's
+  trace, lost every subscriber's frame. The header is now added without changing the message's
+  type.
 - **The `pci` profile and `field-strategies` did not apply inside JSON bodies.** The free-text
   card-number pattern ran first, so a PAN under `cardPan` became `[card-number-redacted]` and
   the field's partial mask was applied to that placeholder (`[card-************ted]`) instead of
@@ -162,6 +170,10 @@
   event encodes about 30% faster. (#13)
 - Masking tests build planted secrets at runtime so secret scanners don't flag
   them. (#10, #11, #12, #15, #16)
+- End-to-end tests (`mvn verify -Pe2e`, see `signoz-e2e/README.md`): two services calling
+  each other over HTTP, Kafka, SQS, gRPC and STOMP check every feature alone and together, on
+  Spring Boot 2 and 3, Spring MVC and WebFlux, Logback and Log4j2, with and without the
+  OpenTelemetry Java agent, against each exporter backend. They found the problems fixed above.
 - Documentation reorganised: the README is now a short landing page, with task-focused
   guides under `docs/` (exporting, logging, tracing, web, metrics, annotations,
   customizing). `CONTRIBUTING.md` (for people) and `AGENTS.md` (for AI coding agents)
