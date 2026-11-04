@@ -9,18 +9,20 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.SpanContext;
-import io.opentelemetry.api.trace.TraceFlags;
-import io.opentelemetry.api.trace.TraceState;
-import io.opentelemetry.context.Context;
-import io.opentelemetry.context.Scope;
 import io.signoz.springboot.grpc.TracingGrpcClientInterceptor;
 import io.signoz.springboot.grpc.TracingGrpcServerInterceptor;
+import io.signoz.springboot.messaging.TracingConsumerInterceptor;
+import io.signoz.springboot.messaging.TracingProducerInterceptor;
 import io.signoz.springboot.sqs.SqsTraceContext;
 import io.signoz.springboot.sqs.TracingSqsRequestHandler;
 import io.signoz.springboot.tracing.TraceContextCodec;
+import io.signoz.springboot.tracing.TraceIdentity;
 import io.signoz.springboot.websocket.TracingStompChannelInterceptor;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.header.Header;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
@@ -30,6 +32,7 @@ import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.MessageBuilder;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -43,12 +46,18 @@ import static org.mockito.Mockito.when;
 /**
  * End-to-end QA for distributed trace propagation: simulates a service chain
  * <pre>
- *     Service A (HTTP)
+ *     Service A (HTTP, agentless)
  *         → Service B (SQS producer → consumer)
  *             → Service C (gRPC client → server)
  *                 → Service D (STOMP outbound → inbound)
+ *                     → Service E (Kafka producer → consumer)
  * </pre>
- * and asserts that the same {@code traceId} arrives at every hop.
+ * and asserts that the same {@code trace_id} arrives at every hop, with no OTel span
+ * active anywhere, i.e. purely through the starter's agentless MDC propagation.
+ *
+ * <p>Service A's MDC comes from {@link TraceIdentity}, the resolver both HTTP filters
+ * (servlet and WebFlux) use, rather than being seeded by hand, so a key-name mismatch
+ * between the filters and the outbound propagators fails this test.
  *
  * <p>The test does not stand up real network or message brokers — it composes
  * the actual production interceptors and helpers, feeding the wire-format
@@ -71,31 +80,22 @@ class EndToEndTracePropagationTest {
 
     @Test
     @SuppressWarnings({"rawtypes", "unchecked"})
-    void traceIdSurvivesHttpToSqsToGrpcToStompChain() throws Exception {
-        SpanContext rootSpanContext = SpanContext.create(
-                TRACE_ID, SPAN_ID, TraceFlags.getSampled(), TraceState.getDefault());
-
-        // ---------- Service A: HTTP server. The TraceIdMdcFilter would have
-        // populated MDC from the inbound traceparent. We simulate that here. ----------
-        MDC.put("traceId", TRACE_ID);
-        MDC.put("spanId", SPAN_ID);
-        MDC.put("traceFlags", "01");
-        MDC.put("requestId", TRACE_ID);
-
-        String serviceAOutboundTraceparent;
-        try (Scope ignored = Context.current().with(Span.wrap(rootSpanContext)).makeCurrent()) {
-            serviceAOutboundTraceparent = TraceContextCodec.currentTraceparent();
+    void traceIdSurvivesHttpToSqsToGrpcToStompToKafkaChain() throws Exception {
+        // ---------- Service A: HTTP server, agentless. The MDC is exactly what the
+        // HTTP filters write for an inbound traceparent. ----------
+        TraceIdentity identity = TraceIdentity.resolve("00-" + TRACE_ID + "-" + SPAN_ID + "-01", null);
+        for (Map.Entry<String, String> e : identity.mdcEntries().entrySet()) {
+            MDC.put(e.getKey(), e.getValue());
         }
+
+        String serviceAOutboundTraceparent = TraceContextCodec.currentTraceparent();
         assertThat(serviceAOutboundTraceparent)
-                .isEqualTo("00-" + TRACE_ID + "-" + SPAN_ID + "-01");
+                .isEqualTo("00-" + TRACE_ID + "-" + identity.getSpanId() + "-01");
 
-        // ---------- Service B (SQS producer): inject into MessageAttributes ----------
-        SendMessageRequest sqsReq;
-        try (Scope ignored = Context.current().with(Span.wrap(rootSpanContext)).makeCurrent()) {
-            TracingSqsRequestHandler producer = new TracingSqsRequestHandler();
-            sqsReq = new SendMessageRequest("queue-url", "payload");
-            producer.beforeExecution(sqsReq);
-        }
+        // ---------- Service B (SQS producer): inject into MessageAttributes from the MDC ----------
+        TracingSqsRequestHandler producer = new TracingSqsRequestHandler();
+        SendMessageRequest sqsReq = new SendMessageRequest("queue-url", "payload");
+        producer.beforeExecution(sqsReq);
         MessageAttributeValue traceparentAttr = sqsReq.getMessageAttributes()
                 .get(SqsTraceContext.TRACEPARENT_ATTRIBUTE);
         assertThat(traceparentAttr.getStringValue()).contains(TRACE_ID);
@@ -107,7 +107,7 @@ class EndToEndTracePropagationTest {
         consumerHeaders.put(SqsTraceContext.TRACEPARENT_ATTRIBUTE, traceparentAttr.getStringValue());
         boolean populated = SqsTraceContext.populateMdcFromHeaders(consumerHeaders);
         assertThat(populated).isTrue();
-        assertThat(MDC.get("traceId")).isEqualTo(TRACE_ID);
+        assertThat(MDC.get("trace_id")).isEqualTo(TRACE_ID);
 
         // ---------- Service C (gRPC client): inject into Metadata, using the MDC
         // populated by the SQS consumer (no active span — falls back to MDC). ----------
@@ -134,17 +134,15 @@ class EndToEndTracePropagationTest {
         TracingGrpcServerInterceptor grpcServer = new TracingGrpcServerInterceptor();
         AtomicReference<String> traceIdInsideHandler = new AtomicReference<>();
         ServerCallHandler handler = (call, h) -> {
-            traceIdInsideHandler.set(MDC.get("traceId"));
+            traceIdInsideHandler.set(MDC.get("trace_id"));
             return mock(ServerCall.Listener.class);
         };
         grpcServer.interceptCall(mock(ServerCall.class), grpcWireMetadata.get(), handler);
         assertThat(traceIdInsideHandler.get()).isEqualTo(TRACE_ID);
 
         // ---------- Service D (STOMP outbound): inject from MDC into native header ----------
-        // MDC is currently set inside-handler; use it for outbound STOMP.
-        MDC.put("traceId", TRACE_ID);
-        MDC.put("spanId", SPAN_ID);
-        MDC.put("traceFlags", "01");
+        // The gRPC handler's MDC (as the server interceptor wrote it) drives outbound STOMP.
+        TraceContextCodec.putMdc(TraceContextCodec.parse(grpcTraceparent));
 
         StompHeaderAccessor outboundAcc = StompHeaderAccessor.create(StompCommand.MESSAGE);
         Message<byte[]> outboundMsg = MessageBuilder.createMessage(new byte[0], outboundAcc.getMessageHeaders());
@@ -165,17 +163,33 @@ class EndToEndTracePropagationTest {
                 TracingStompChannelInterceptor.Direction.INBOUND);
         stompIn.preSend(inboundMsg, mock(MessageChannel.class));
 
-        // The traceId that started at Service A reached Service D's STOMP listener.
-        assertThat(MDC.get("traceId")).isEqualTo(TRACE_ID);
+        assertThat(MDC.get("trace_id")).isEqualTo(TRACE_ID);
+
+        // ---------- Service E (Kafka producer): inject from the STOMP listener's MDC ----------
+        ProducerRecord<Object, Object> kafkaRecord = new TracingProducerInterceptor()
+                .onSend(new ProducerRecord<Object, Object>("orders", "key", "value"));
+        Header kafkaTraceparent = kafkaRecord.headers().lastHeader(TraceContextCodec.TRACEPARENT_HEADER);
+        assertThat(kafkaTraceparent).isNotNull();
+
+        // ---------- Service E (Kafka consumer): extract into MDC ----------
+        MDC.clear();
+        ConsumerRecord<Object, Object> consumed = new ConsumerRecord<Object, Object>("orders", 0, 0L, "key", "value");
+        consumed.headers().add(kafkaTraceparent);
+        new TracingConsumerInterceptor().onConsume(new ConsumerRecords<Object, Object>(
+                Collections.singletonMap(new TopicPartition("orders", 0),
+                        Collections.singletonList(consumed))));
+
+        // The trace ID that started at Service A reached Service E's Kafka listener.
+        assertThat(MDC.get("trace_id")).isEqualTo(TRACE_ID);
     }
 
     @Test
     void agentlessFallbackBuildsTraceparentFromMdcAlone() {
         // No active OTel span — MDC is the only source. This is the path
         // exercised when neither the agent nor the starter SDK is initialised.
-        MDC.put("traceId", TRACE_ID);
-        MDC.put("spanId", SPAN_ID);
-        MDC.put("traceFlags", "01");
+        MDC.put("trace_id", TRACE_ID);
+        MDC.put("span_id", SPAN_ID);
+        MDC.put("trace_flags", "01");
 
         String traceparent = TraceContextCodec.currentTraceparent();
         assertThat(traceparent).isEqualTo("00-" + TRACE_ID + "-" + SPAN_ID + "-01");

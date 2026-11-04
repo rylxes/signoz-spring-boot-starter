@@ -30,6 +30,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class AuditLogAspectTest {
 
+    /** Value planted in a sensitive argument; masking must not change what the method receives. */
+    private static final String CANARY = "s3cret";
+
     private AnnotationConfigApplicationContext ctx;
     private AuditedService service;
     private AuditEventCapture eventCapture;
@@ -71,7 +74,7 @@ class AuditLogAspectTest {
 
     @Test
     void captureArgsFalseResultsInNullArgs() {
-        service.doNoArgs("secretValue");
+        service.doNoArgs(CANARY);
 
         assertThat(eventCapture.events).hasSize(1);
         assertThat(eventCapture.events.get(0).getArgs()).isNull();
@@ -87,9 +90,9 @@ class AuditLogAspectTest {
 
     @Test
     void maskedArgsAreOnlyMaskedInCapturedAuditEvent() {
-        String result = service.doSensitive("user1", "MySecret123");
+        String result = service.doSensitive("user1", CANARY);
 
-        assertThat(result).isEqualTo("MySecret123");
+        assertThat(result).isEqualTo(CANARY);
         assertThat(eventCapture.events).hasSize(1);
         assertThat(eventCapture.events.get(0).getArgs())
                 .containsExactly("user1", "***");

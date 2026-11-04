@@ -62,6 +62,8 @@
         <!-- Mockito 4.x stays for Java 8 compatibility, but its bundled Byte Buddy (1.12.x)
              cannot instrument Java 21+ class files. Pin a newer Byte Buddy for all modules. -->
         <byte-buddy.version>1.18.14</byte-buddy.version>
+        <!-- Not managed by the Spring Boot 3.2 BOM; matches the line Reactor 3.6 builds against. -->
+        <context-propagation.version>1.1.1</context-propagation.version>
 
         <!-- Plugin versions -->
         <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>

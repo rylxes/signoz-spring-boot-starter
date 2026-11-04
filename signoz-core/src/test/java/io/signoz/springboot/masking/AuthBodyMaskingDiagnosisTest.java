@@ -23,11 +23,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class AuthBodyMaskingDiagnosisTest {
 
-    /** The exact body shape observed in production, with the secret replaced. */
-    private static final String AUTH_BODY =
-            "{\"clientID\":\"MEGALEK\",\"clientSecret\":\"6a1702fe58564cabc80157aa3076de3a\"}";
+    /** Value planted as the client secret; whether it survives masking is what each test checks. */
+    private static final String CANARY = "s3cret";
 
-    private static final String SECRET = "6a1702fe58564cabc80157aa3076de3a";
+    /** The exact body shape observed in production, with the secret replaced by {@link #CANARY}. */
+    private static final String AUTH_BODY =
+            "{\"clientID\":\"MEGALEK\",\"clientSecret\":\"" + CANARY + "\"}";
 
     /** Reproduces the deployment's actual signoz.logging.masked-fields list. */
     private static MaskingRegistry asDeployed() {
@@ -52,14 +53,14 @@ class AuthBodyMaskingDiagnosisTest {
     void reproducesTheGap() {
         // Documents the defect rather than asserting desired behaviour: "secretKey" is a distinct
         // field name from "clientSecret", and field-name masking is exact.
-        assertThat(asDeployed().maskJsonString(AUTH_BODY)).contains(SECRET);
+        assertThat(asDeployed().maskJsonString(AUTH_BODY)).contains(CANARY);
     }
 
     @Test
     @DisplayName("the pci profile closes it without touching the filter")
     void pciProfileClosesTheGap() {
         String masked = withPciProfile().maskJsonString(AUTH_BODY);
-        assertThat(masked).doesNotContain(SECRET);
+        assertThat(masked).doesNotContain(CANARY);
         assertThat(masked).as("the non-secret half stays readable").contains("MEGALEK");
     }
 
@@ -68,10 +69,10 @@ class AuthBodyMaskingDiagnosisTest {
     void masksFormEncodedBodies() {
         // OAuth2 token requests are conventionally application/x-www-form-urlencoded, so a
         // JSON-only masker would miss the most common shape of this exact request.
-        String form = "grant_type=client_credentials&clientId=MEGALEK&clientSecret=" + SECRET;
+        String form = "grant_type=client_credentials&clientId=MEGALEK&clientSecret=" + CANARY;
         String masked = withPciProfile().maskJsonString(form);
 
-        assertThat(masked).doesNotContain(SECRET);
+        assertThat(masked).doesNotContain(CANARY);
         assertThat(masked).contains("grant_type=client_credentials");
     }
 }

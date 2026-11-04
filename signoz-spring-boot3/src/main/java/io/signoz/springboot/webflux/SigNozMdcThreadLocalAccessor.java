@@ -1,0 +1,77 @@
+package io.signoz.springboot.webflux;
+
+import io.micrometer.context.ThreadLocalAccessor;
+import org.slf4j.MDC;
+
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/**
+ * Bridges the SigNoz MDC entries that the reactive filters keep in the Reactor context
+ * (under {@link ReactiveMdc#CONTEXT_KEY}) to the thread-local SLF4J MDC.
+ *
+ * <p>With Reactor's automatic context propagation enabled, Reactor calls
+ * {@link #setValue(Map)} with the context's entries whenever it runs an operator on a
+ * thread, and {@link #restore(Map)} afterwards, so logs written anywhere in a request's
+ * reactive pipeline carry its {@code requestId}, trace IDs and user context.
+ *
+ * <p>Only the keys in {@link ReactiveMdc#KNOWN_KEYS} are ever touched.
+ */
+public class SigNozMdcThreadLocalAccessor implements ThreadLocalAccessor<Map<String, String>> {
+
+    @Override
+    public Object key() {
+        return ReactiveMdc.CONTEXT_KEY;
+    }
+
+    @Override
+    public Map<String, String> getValue() {
+        Map<String, String> current = new LinkedHashMap<>();
+        for (String key : ReactiveMdc.KNOWN_KEYS) {
+            String value = MDC.get(key);
+            if (value != null) {
+                current.put(key, value);
+            }
+        }
+        return current.isEmpty() ? null : Collections.unmodifiableMap(current);
+    }
+
+    /**
+     * Replaces the SigNoz MDC keys with {@code value}'s entries. Keys absent from
+     * {@code value} are cleared, so a signal for one request can never pick up another
+     * request's values (e.g. its {@code userId}) left on the thread.
+     */
+    @Override
+    public void setValue(Map<String, String> value) {
+        setValue();
+        if (value == null) {
+            return;
+        }
+        // Only the SigNoz keys: setValue() clears exactly these, so any other key written
+        // here could never be cleared and would leak into later work on the thread.
+        for (String key : ReactiveMdc.KNOWN_KEYS) {
+            String v = value.get(key);
+            if (v != null) {
+                MDC.put(key, v);
+            }
+        }
+    }
+
+    @Override
+    public void setValue() {
+        for (String key : ReactiveMdc.KNOWN_KEYS) {
+            MDC.remove(key);
+        }
+    }
+
+    @Override
+    public void restore(Map<String, String> previousValue) {
+        setValue(previousValue);
+    }
+
+    @Override
+    public void restore() {
+        setValue();
+    }
+}

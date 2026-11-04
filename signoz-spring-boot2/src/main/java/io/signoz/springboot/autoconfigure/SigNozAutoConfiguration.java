@@ -67,6 +67,7 @@ import org.springframework.context.annotation.Import;
         SigNozLog4j2AutoConfiguration.class,
         SigNozTracingAutoConfiguration.class,
         SigNozWebAutoConfiguration.class,
+        SigNozReactiveWebAutoConfiguration.class,
         SigNozAuditAutoConfiguration.class,
         SigNozMetricsAutoConfiguration.class,
         SigNozTimedAutoConfiguration.class,

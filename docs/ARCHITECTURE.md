@@ -62,6 +62,14 @@ two separate modules rather than sharing a single compiled artifact.
 
 - Contains only web-layer and auto-configuration classes
 - `TraceIdMdcFilter` and `HttpLoggingFilter` (one copy per servlet namespace)
+- `SigNozReactiveWebAutoConfiguration`, which registers the reactive filters from
+  `signoz-core`'s `io.signoz.springboot.webflux` package (one shared copy: the
+  WebFlux API has no `javax`/`jakarta` split). The core classes are compiled
+  against Spring 5.3 / Reactor 3.4 and use only APIs that also exist in Spring 6
+  (`getRawStatusCode()`, `DataBuffer.getByte()`); both modules' integration tests
+  run them against their own Spring version.
+- Spring Boot 3 only: `SigNozMdcThreadLocalAccessor`, which lets Reactor's
+  automatic context propagation restore the SigNoz MDC on every thread hop
 - All auto-configuration entry points
 - Registration files for Spring Boot's auto-configuration loader
 
@@ -119,8 +127,8 @@ the services talk to each other.
 
 | Protocol | Producer / outbound | Consumer / inbound | Wire artefact |
 |---|---|---|---|
-| HTTP | `TracingRestTemplateInterceptor` / `TracingWebClientFilter` | `TraceIdMdcFilter` | `traceparent` HTTP header |
-| Kafka | `TracingProducerInterceptor` | `TracingConsumerInterceptor` | record headers (`traceparent`, `traceId`, `spanId`) |
+| HTTP | `TracingRestTemplateInterceptor` / `TracingWebClientFilter` | `TraceIdMdcFilter` (servlet) / `TraceIdWebFilter` (WebFlux) | `traceparent` HTTP header |
+| Kafka | `TracingProducerInterceptor` | `TracingConsumerInterceptor` | record headers (`traceparent`; legacy `traceId`, `spanId` for older consumers) |
 | SQS | `TracingSqsRequestHandler` (AWS SDK v1) | `@SqsListener` aspect (awspring v2/v3 / legacy) | SQS `MessageAttributes` (`traceparent`) |
 | gRPC | `TracingGrpcClientInterceptor` | `TracingGrpcServerInterceptor` | gRPC `Metadata` (`traceparent`) |
 | WebSocket / STOMP | `TracingStompChannelInterceptor` (OUTBOUND) + handshake interceptor | `TracingStompChannelInterceptor` (INBOUND) + handshake interceptor | STOMP native header + WebSocket session attribute |
@@ -164,6 +172,19 @@ fills the gap. There is no double-instrumentation path.
   This is consistent across every MDC-based correlation pattern in this
   starter (Kafka, SQS, gRPC, STOMP) — full cross-thread MDC is the OTel
   agent's job.
+- **WebFlux**: the reactive filters keep the request's MDC entries in the
+  Reactor context (`ReactiveMdc.CONTEXT_KEY`), which follows the request across
+  threads. `TracingWebClientFilter` reads them from there, so wire-side
+  propagation is exact. Thread MDC is set while the filter chain is subscribed;
+  on Spring Boot 3 Reactor's automatic context propagation restores it on every
+  hop, on Spring Boot 2 handlers use `ReactiveMdc.onNext(...)` past the first hop.
+- **MDC key names**: every inbound path writes the OTel-native `trace_id` /
+  `span_id` / `trace_flags` (the same keys the OTel agent uses): both HTTP filters
+  via `TraceIdentity`, and the Kafka, SQS, gRPC and STOMP consumers via
+  `TraceContextCodec.putMdc(...)`. `TraceContextCodec.mdcTraceparent()` reads the
+  snake_case family first and falls back to the legacy camelCase keys (which
+  application code may still write), never mixing the two, and only emits a
+  `traceparent` whose values are valid hex.
 
 ---
 
@@ -232,6 +253,12 @@ MaskingRegistry (Spring @Component)
 `MaskingRegistry.mask(fieldName, value)` — field-based lookup (used by `SigNozJsonEncoder`)
 `MaskingRegistry.maskMessage(text)` — regex scan over free-form log messages
 `MaskingRegistry.maskJsonString(json)` — field-based + pattern scan over a JSON string
+
+`SigNozJsonEncoder` never runs these regexes over its serialised output line. Its second pass walks
+the line with a streaming JSON parser and masks each string value unescaped (sensitive field names
+via `mask`, everything else via `maskJsonString`). A free-text pattern such as `password=\S+` would
+otherwise run past the closing quote of the `message` value, because LogstashEncoder writes no
+whitespace between fields, and swallow the rest of the line.
 
 ---
 

@@ -1,8 +1,10 @@
 package io.signoz.springboot.outbound;
 
 import io.signoz.springboot.properties.SigNozOutboundProperties;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -37,6 +39,29 @@ class TracingRestTemplateInterceptorTest {
         when(mockRequest.getHeaders()).thenReturn(new HttpHeaders());
         when(mockResponse.getStatusCode()).thenReturn(HttpStatus.OK);
         when(execution.execute(any(), any(byte[].class))).thenReturn(mockResponse);
+    }
+
+    @AfterEach
+    void clearMdc() {
+        MDC.clear();
+    }
+
+    @Test
+    void propagatesTraceparentFromHttpFilterMdcKeys() throws IOException {
+        // TraceIdMdcFilter writes OTel-native snake_case keys when no agent is present.
+        MDC.put("trace_id", "4bf92f3577b34da6a3ce929d0e0e4736");
+        MDC.put("span_id", "00f067aa0ba902b7");
+        MDC.put("trace_flags", "01");
+        MDC.put("requestId", "req-123");
+
+        HttpHeaders headers = new HttpHeaders();
+        when(mockRequest.getHeaders()).thenReturn(headers);
+
+        new TracingRestTemplateInterceptor(props).intercept(mockRequest, new byte[0], execution);
+
+        assertThat(headers.getFirst("traceparent"))
+                .isEqualTo("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
+        assertThat(headers.getFirst("X-Request-ID")).isEqualTo("req-123");
     }
 
     @Test

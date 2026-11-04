@@ -22,21 +22,22 @@ audit trails, and JVM/HTTP metrics — with no code changes required.
 | **OTLP log export** | `OtlpLogbackAppender` ships logs directly to SigNoz collector |
 | **Field masking** | `@Masked` on parameters; built-in rules for passwords, tokens, credit cards, SSNs |
 | **Distributed tracing** | `@Traced` creates OpenTelemetry spans; trace-ID injected into MDC automatically |
-| **HTTP logging** | `HttpLoggingFilter` logs method, path, status, duration for every request |
-| **Agentless trace correlation** | `TraceIdMdcFilter` reuses inbound `traceparent` / `X-Request-ID` and emits both on the response — end-to-end log correlation across services without running an OTEL agent |
+| **HTTP logging** | `HttpLoggingFilter` (servlet) / `HttpLoggingWebFilter` (WebFlux) logs method, path, status, duration for every request |
+| **Agentless trace correlation** | `TraceIdMdcFilter` (servlet) / `TraceIdWebFilter` (WebFlux) reuses inbound `traceparent` / `X-Request-ID` and emits both on the response — end-to-end log correlation across services without running an OTEL agent |
+| **WebFlux support** | Reactive `WebFilter`s for trace IDs, HTTP logging and user context; on Spring Boot 3 the MDC follows each request across Reactor thread hops. See [WebFlux](#webflux-reactive-applications) |
 | **Audit trail** | `@AuditLog` publishes a structured `AuditEvent` (actor, action, outcome, args) |
 | **JVM + HTTP metrics** | Micrometer OTLP registry sends metrics to SigNoz automatically |
 | **Compile-time logger** | `@SigNozLog` injects `private static final Logger log` via APT (like `@Slf4j`) |
 | **Method profiling** | `@Timed` logs method duration, WARN for slow methods, publishes Micrometer Timer |
 | **Alert on failure** | `@AlertOnFailure` increments a Micrometer Counter when a method throws |
 | **Outbound HTTP tracing** | Auto-injects `traceparent` + `X-Request-ID` into RestTemplate/WebClient calls (with MDC fallback when no OTEL span is active), logs outbound requests |
-| **Kafka trace propagation** | Producer/Consumer interceptors propagate `traceId` via Kafka record headers |
+| **Kafka trace propagation** | Producer/Consumer interceptors propagate W3C `traceparent` via Kafka record headers, with or without an OTel agent |
 | **SQS trace propagation** | AWS SDK v1 `RequestHandler2` injects `traceparent` into SQS `MessageAttributes`; AOP aspect on `@SqsListener` extracts it on the consumer side. Auto-skipped when the OTel Java Agent is on |
 | **gRPC trace propagation** | `ClientInterceptor` injects `traceparent` into gRPC `Metadata`; `ServerInterceptor` extracts to MDC. Auto-skipped when the OTel Java Agent is on |
 | **WebSocket / STOMP trace propagation** | Handshake interceptor captures inbound `traceparent` on the upgrade; `ChannelInterceptor` propagates per-frame. Auto-skipped when the OTel Java Agent is on |
 | **Slow query detection** | DataSource proxy times SQL queries, WARN above threshold (default 500ms) |
 | **Startup diagnostics** | Logs full config summary at boot — what's enabled, endpoints, thresholds |
-| **User context enrichment** | Extracts `userId`/`userEmail`/`userRoles` from SecurityContext into MDC |
+| **User context enrichment** | Extracts `userId`/`userEmail`/`userRoles` from SecurityContext (or the reactive SecurityContext in WebFlux) into MDC |
 | **Error fingerprinting** | SHA-256 hash of exception type + stack → stable `errorId` in MDC for grouping |
 | **Async context propagation** | `TracingTaskDecorator` copies MDC (traceId, requestId) to `@Async` worker threads |
 | **Log sampling** | Probabilistic filtering — reduce INFO volume while ERROR/WARN always pass |
@@ -148,7 +149,7 @@ to the agent** and focuses on app-level features only.
 | OTLP log export | Skipped (agent handles it) | Active |
 | OTLP trace export | Skipped (agent handles it) | Active |
 | OTLP metrics export | Skipped (agent handles it) | Active |
-| Trace-ID in MDC (`traceId`, `spanId`) | From agent's active span | From inbound `traceparent`/`X-Request-ID`, else freshly minted |
+| Trace-ID in MDC (`trace_id`, `span_id`, `trace_flags`) | From agent's active span | From inbound `traceparent`/`X-Request-ID`, else freshly minted |
 | Cross-service trace propagation (HTTP) | Agent propagates W3C `traceparent` | Starter propagates `traceparent` + `X-Request-ID` via RestTemplate / WebClient interceptors |
 | Cross-service trace propagation (Kafka) | Agent propagates | Starter `TracingProducerInterceptor` / `TracingConsumerInterceptor` |
 | Cross-service trace propagation (SQS) | Agent propagates | Starter `TracingSqsRequestHandler` + `@SqsListener` aspect |
@@ -211,7 +212,7 @@ OTLP export requests (logs, traces, and metrics). Find your ingestion key in
 ## Agentless Trace Propagation
 
 You don't need the OpenTelemetry Java Agent to get **end-to-end log correlation**
-across services. As long as the starter is on every hop, a single `traceId` /
+across services. As long as the starter is on every hop, a single `trace_id` /
 `requestId` flows through the entire request path and lands in every log line —
 making "find all logs for this incident" a single SigNoz query.
 
@@ -228,8 +229,16 @@ priority order:
 4. **Freshly minted IDs** — when we're the edge of the system.
 
 The filter then writes **both** `traceparent` and `X-Request-ID` on the response,
-and populates MDC with `traceId`, `spanId`, `traceFlags`, `requestId` — cleared in
-`finally`.
+and populates MDC with `requestId` plus the OTel-native `trace_id`, `span_id`,
+`trace_flags` (omitted when an agent owns them) — cleared in `finally`. The Kafka,
+SQS, gRPC and STOMP consumers write the same keys, so one SigNoz query finds a
+trace's logs whatever protocol each hop used.
+
+> **Upgrading from 1.0.11 or earlier:** the messaging and RPC consumers used to
+> write camelCase `traceId` / `spanId` / `traceFlags` (the HTTP filter switched earlier).
+> Update log patterns such as `%X{traceId}` and saved SigNoz queries to the
+> snake_case names. The starter still *reads* the camelCase keys as a fallback, so
+> application code that writes them keeps propagating.
 
 **Outbound propagation.** `TracingRestTemplateInterceptor` and
 `TracingWebClientFilter` inject `traceparent` + `X-Request-ID` on every outbound
@@ -237,7 +246,7 @@ call. When an OTEL span is active they read from the `SpanContext`; otherwise
 they fall back to MDC values written by the filter. No agent required.
 
 **What you get vs. what you don't.** This gives you log-level correlation:
-filter by `traceId=abc…` in SigNoz and see every log across the whole
+filter by `trace_id=abc…` in SigNoz and see every log across the whole
 transaction. You do **not** get span waterfalls, timing per hop, or the SigNoz
 trace view — those need actual spans, which means either the OTEL Java Agent,
 the [OpenTelemetry Spring Boot Starter](https://opentelemetry.io/docs/zero-code/java/spring-boot-starter/),
@@ -421,8 +430,13 @@ request.
 The identity comes from whichever of these is available:
 
 1. The active OTEL `SpanContext` (agent or SDK path).
-2. MDC values populated by [`TraceIdMdcFilter`](#agentless-trace-propagation) —
-   so header propagation still works end-to-end in fully agentless deployments.
+2. For `WebClient` in a WebFlux app: the request's IDs in the Reactor context,
+   stored there by [`TraceIdWebFilter`](#webflux-reactive-applications), so they
+   survive thread hops.
+3. MDC values populated by [`TraceIdMdcFilter`](#agentless-trace-propagation)
+   (`trace_id` / `span_id` / `trace_flags`, falling back to the legacy
+   `traceId` / `spanId` / `traceFlags` keys) — so header propagation still works
+   end-to-end in fully agentless deployments.
 
 ```yaml
 signoz:
@@ -436,7 +450,7 @@ signoz:
 
 ## Kafka Trace Propagation
 
-The starter provides Kafka interceptors that propagate `traceId` across message queues.
+The starter provides Kafka interceptors that propagate trace context across message queues.
 
 Add them to your Kafka producer/consumer config:
 
@@ -451,8 +465,13 @@ spring:
         interceptor.classes: io.signoz.springboot.messaging.TracingConsumerInterceptor
 ```
 
-The producer injects `traceId`, `spanId`, and `traceparent` into Kafka record headers.
-The consumer extracts them into MDC so all downstream logs are correlated.
+The producer injects `traceparent` (plus legacy `traceId` / `spanId` headers for
+consumers on older versions) into Kafka record headers. It reads the active OTel
+span, or, without an agent, the MDC written by the HTTP filters. The consumer
+prefers `traceparent`, falls back to the legacy headers, and writes `trace_id` /
+`span_id` / `trace_flags` into the MDC so downstream logs are correlated. With the
+OTel Java agent present, the consumer leaves the MDC to the agent's Kafka
+instrumentation.
 
 ---
 
@@ -496,7 +515,7 @@ trace context cannot be auto-extracted — add a `Message<?>` parameter or call
 @SqsListener("my-queue")
 public void onMessage(@Payload MyDto body, @Headers Map<String,Object> headers) {
     // headers now has SqsTraceContext.populateMdcFromHeaders applied automatically
-    log.info("processing"); // logs include the upstream traceId
+    log.info("processing"); // logs include the upstream trace_id
 }
 ```
 
@@ -729,6 +748,8 @@ signoz:
 ```
 
 > Requires Spring Security on the classpath. Uses reflection — no hard dependency.
+> In a WebFlux app the same keys are read from `ReactiveSecurityContextHolder` by
+> `UserContextWebFilter`, which runs after Spring Security's filter chain.
 
 ---
 
@@ -761,6 +782,57 @@ signoz:
   web:
     log-request-body: false
     log-response-body: false
+```
+
+---
+
+## WebFlux (Reactive) Applications
+
+In a Spring WebFlux application the starter registers reactive `WebFilter`s in
+place of the servlet filters. All `signoz.web.*` and `signoz.user-context.*`
+properties apply unchanged.
+
+| Servlet filter | WebFlux filter | Order |
+|---|---|---|
+| `TraceIdMdcFilter` | `TraceIdWebFilter` | `HIGHEST_PRECEDENCE + 1` |
+| `HttpLoggingFilter` | `HttpLoggingWebFilter` | `HIGHEST_PRECEDENCE + 2` |
+| `UserContextMdcFilter` | `UserContextWebFilter` | `0` (after Spring Security's `-100`) |
+
+What you get per request:
+
+- `X-Request-ID` and `traceparent` response headers, resolved exactly like the
+  servlet filter (active OTel span → inbound `traceparent` → inbound
+  `X-Request-ID` → fresh IDs).
+- One `SIGNOZ_HTTP` access-log line with method, path, query, status, duration,
+  and optionally masked headers and bounded, masked bodies. Failed requests are
+  logged with the status the error handler actually sent (for example 404 for a
+  `ResponseStatusException`), plus `error=<exception class>`.
+- `requestId`, `trace_id`, `span_id`, `trace_flags` (and `userId`, `userEmail`,
+  `userRoles` for authenticated users) in the MDC of your handler's logs, and in
+  the Reactor context under `ReactiveMdc.CONTEXT_KEY`.
+- Outbound `WebClient` calls carry the request's `traceparent` and
+  `X-Request-ID`, even after thread hops.
+
+**MDC across thread hops.** Reactive handlers often continue on another thread
+(`publishOn`, a `WebClient` response, a reactive driver). On **Spring Boot 3** the
+starter registers a context-propagation `ThreadLocalAccessor` for the SigNoz MDC
+and enables Reactor's automatic context propagation (the same switch as
+`spring.reactor.context-propagation=auto`), so every log line in the pipeline
+keeps its IDs. To opt out:
+
+```yaml
+signoz:
+  web:
+    reactive-context-propagation: false
+```
+
+On **Spring Boot 2** (Reactor 3.4 has no automatic propagation), and with the
+switch above off, the MDC is set until the handler's first thread hop. After it,
+log through `ReactiveMdc`, which reads the IDs from the Reactor context:
+
+```java
+return webClient.get().uri("/inventory").retrieve().bodyToMono(Stock.class)
+        .doOnEach(ReactiveMdc.onNext(stock -> log.info("stock {}", stock.count())));
 ```
 
 ---

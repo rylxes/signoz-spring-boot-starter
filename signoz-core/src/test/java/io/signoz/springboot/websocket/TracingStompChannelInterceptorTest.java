@@ -38,12 +38,12 @@ class TracingStompChannelInterceptorTest {
 
         interceptor.preSend(message, mock(MessageChannel.class));
 
-        assertThat(MDC.get("traceId")).isEqualTo("0af7651916cd43dd8448eb211c80319c");
-        assertThat(MDC.get("spanId")).isEqualTo("b7ad6b7169203331");
+        assertThat(MDC.get("trace_id")).isEqualTo("0af7651916cd43dd8448eb211c80319c");
+        assertThat(MDC.get("span_id")).isEqualTo("b7ad6b7169203331");
         assertThat(MDC.get("requestId")).isEqualTo("req-abc");
 
         interceptor.afterSendCompletion(message, mock(MessageChannel.class), true, null);
-        assertThat(MDC.get("traceId")).isNull();
+        assertThat(MDC.get("trace_id")).isNull();
     }
 
     @Test
@@ -96,7 +96,7 @@ class TracingStompChannelInterceptorTest {
 
         interceptor.preSend(message, mock(MessageChannel.class));
 
-        assertThat(MDC.get("traceId")).isEqualTo("0af7651916cd43dd8448eb211c80319c");
+        assertThat(MDC.get("trace_id")).isEqualTo("0af7651916cd43dd8448eb211c80319c");
     }
 
     @Test
@@ -109,6 +109,6 @@ class TracingStompChannelInterceptorTest {
 
         interceptor.preSend(message, mock(MessageChannel.class));
 
-        assertThat(MDC.get("traceId")).isNull();
+        assertThat(MDC.get("trace_id")).isNull();
     }
 }
