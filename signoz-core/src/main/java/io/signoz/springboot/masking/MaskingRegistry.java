@@ -356,21 +356,25 @@ public class MaskingRegistry {
         if (XmlMasker.looksLikeXml(json)) {
             return XmlMasker.mask(json, this);
         }
-        // Apply regex-based message patterns first
-        String result = maskMessage(json);
-
-        // Then by field name. Both passes find every name/value pair and look the name up, rather
-        // than searching for each registered name: names are normalised and suffix-matched, so the
-        // set of sensitive names is open-ended. One pass per shape is also cheaper than one per
-        // registered field on every log event.
+        // By field name first, so each field gets its own strategy. The free-text patterns below
+        // would otherwise rewrite a value before its field is seen: a PAN under "cardPan" became
+        // "[card-number-redacted]", and the pci profile's partial mask (keep BIN and last four)
+        // was then applied to that placeholder. Once a field is masked its value no longer
+        // matches the patterns, so running them second changes nothing a field rule decided.
+        //
+        // Both passes find every name/value pair and look the name up, rather than searching for
+        // each registered name: names are normalised and suffix-matched, so the set of sensitive
+        // names is open-ended. One pass per shape is also cheaper than one per registered field.
         // "fieldName":"value" or "fieldName": "value"
-        result = maskPairs(JSON_PAIR, result, true);
+        String result = maskPairs(JSON_PAIR, json, true);
 
         // Then the `field=value` form. This covers two shapes JSON matching misses entirely:
         // application/x-www-form-urlencoded bodies (the conventional OAuth2 token request) and
         // Lombok's default toString rendering, which is what a DTO logged with {} produces.
         result = maskPairs(KV_PAIR, result, false);
-        return result;
+
+        // Then the free-text patterns, for secrets that are not under a sensitive name.
+        return maskMessage(result);
     }
 
     /**

@@ -130,13 +130,13 @@ because the starter can't attach itself to objects you build yourself:
 |---|---|
 | JSON logs, masking, OTLP export, HTTP access logs, trace IDs in the MDC, user context | None |
 | Outbound RestTemplate / WebClient tracing | None, **if** you build clients from Spring Boot's `RestTemplateBuilder` or `WebClient.Builder` bean. A `new RestTemplate()` isn't traced. [Details](docs/TRACING.md#outbound-http) |
-| `@Async` MDC propagation | None for Spring Boot's own executor. Executors you create need the `TracingTaskDecorator`. [Details](docs/TRACING.md#async-threads) |
+| `@Async` MDC propagation | None for Spring Boot's own executor. Executors you create need the `TracingTaskDecorator`, and so do apps with other `Executor` beans (WebSocket/STOMP adds some). [Details](docs/TRACING.md#async-threads) |
 | Kafka | Add the two interceptor classes to `spring.kafka.*.properties`. [Details](docs/TRACING.md#kafka) |
 | SQS | Producer: add `TracingSqsRequestHandler` to your SQS client. Consumer: none. [Details](docs/TRACING.md#sqs) |
 | gRPC | Add the client and server interceptors to your channel and server. [Details](docs/TRACING.md#grpc) |
 | WebSocket / STOMP | Frames: none. Handshake: add `TracingWebSocketHandshakeInterceptor`. [Details](docs/TRACING.md#websocket--stomp) |
 | Metrics | Add `micrometer-registry-otlp` (and Actuator for HTTP metrics). [Details](docs/METRICS.md#jvm-and-http-metrics) |
-| `@SigNozLog` on Java 9+ | May need `--add-exports` compiler flags. [Details](docs/ANNOTATIONS.md#signozlog--compile-time-logger) |
+| `@SigNozLog` on JDK 16+ | Four `--add-exports` flags for a forked compiler. [Details](docs/ANNOTATIONS.md#signozlog--compile-time-logger) |
 
 To turn the whole starter off without removing it, set `signoz.enabled: false`. Every feature also
 has its own switch; see [Customizing](docs/CUSTOMIZING.md).

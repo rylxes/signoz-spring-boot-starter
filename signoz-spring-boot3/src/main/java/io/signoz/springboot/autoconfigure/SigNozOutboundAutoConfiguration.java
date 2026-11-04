@@ -9,6 +9,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.web.client.RestTemplateCustomizer;
+import org.springframework.boot.web.reactive.function.client.WebClientCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -37,14 +38,19 @@ public class SigNozOutboundAutoConfiguration {
     @ConditionalOnClass(name = "org.springframework.web.reactive.function.client.WebClient")
     static class WebClientTracingConfiguration {
 
+        /**
+         * Declared as {@code WebClientCustomizer}, not {@code Object}: Spring Boot collects
+         * customizers by type when it creates a {@code WebClient.Builder}, and a bean whose
+         * factory method returns {@code Object} is only matched once it has been created. A
+         * builder injected into a bean created earlier (any application bean) then missed it, so
+         * its WebClient was neither traced nor logged.
+         */
         @Bean
         @ConditionalOnMissingBean(name = "sigNozWebClientCustomizer")
-        public Object sigNozWebClientCustomizer(SigNozOutboundProperties props,
-                                                ObjectProvider<MaskingRegistry> maskingRegistry) {
+        public WebClientCustomizer sigNozWebClientCustomizer(SigNozOutboundProperties props,
+                                                             ObjectProvider<MaskingRegistry> maskingRegistry) {
             MaskingRegistry registry = maskingRegistry.getIfAvailable();
-            // WebClientCustomizer adds the tracing filter
-            return (org.springframework.boot.web.reactive.function.client.WebClientCustomizer)
-                    builder -> builder.filter(new TracingWebClientFilter(props, registry));
+            return builder -> builder.filter(new TracingWebClientFilter(props, registry));
         }
     }
 }

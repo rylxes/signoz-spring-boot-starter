@@ -12,11 +12,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.autoconfigure.web.reactive.function.client.WebClientAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.web.client.RestTemplateCustomizer;
 import org.springframework.boot.web.reactive.function.client.WebClientCustomizer;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
@@ -151,5 +153,26 @@ class SigNozOutboundAutoConfigurationTest {
     private String lastLine() {
         assertThat(appender.list).isNotEmpty();
         return appender.list.get(appender.list.size() - 1).getFormattedMessage();
+    }
+
+    @Test
+    void aWebClientBuilderInjectedIntoAnApplicationBeanIsTraced() {
+        // Application beans are created before auto-configured ones, so the builder this bean
+        // receives is made before the starter's customizer bean exists. Spring Boot must still
+        // find the customizer by its type.
+        runner.withConfiguration(AutoConfigurations.of(WebClientAutoConfiguration.class))
+                .withUserConfiguration(EarlyWebClientUser.class)
+                .run(ctx -> assertThat(ctx.getBean(EarlyWebClientUser.class).filters)
+                        .anyMatch(TracingWebClientFilter.class::isInstance));
+    }
+
+    /** An application bean that builds its WebClient from Spring Boot's builder, as the guide says. */
+    @Configuration
+    static class EarlyWebClientUser {
+        final List<ExchangeFilterFunction> filters = new ArrayList<ExchangeFilterFunction>();
+
+        EarlyWebClientUser(WebClient.Builder builder) {
+            builder.filters(filters::addAll);
+        }
     }
 }

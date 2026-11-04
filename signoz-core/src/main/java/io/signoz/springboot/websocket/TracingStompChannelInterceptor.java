@@ -6,8 +6,10 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageHandler;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
+import org.springframework.messaging.support.ExecutorChannelInterceptor;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 
@@ -19,8 +21,12 @@ import org.springframework.messaging.support.MessageHeaderAccessor;
  * <ul>
  *   <li><b>{@link Direction#INBOUND}</b> on the client-inbound channel —
  *       extracts the {@code traceparent} STOMP native header (or the value
- *       captured at handshake time) and populates MDC; clears MDC in
- *       {@link #afterSendCompletion}.</li>
+ *       captured at handshake time) and populates MDC on the thread that runs
+ *       the {@code @MessageMapping} handler, clearing it afterwards. Spring's
+ *       client-inbound channel is executor-backed by default, so that is not the
+ *       thread that sent the frame into the channel: the MDC is set in
+ *       {@link #beforeHandle} (handler thread) as well as in {@link #preSend},
+ *       which covers synchronous channels.</li>
  *   <li><b>{@link Direction#OUTBOUND}</b> on the client-outbound channel and
  *       the broker channel — injects the current {@code traceparent}
  *       (active span or MDC) into the STOMP frame headers before send.</li>
@@ -30,7 +36,7 @@ import org.springframework.messaging.support.MessageHeaderAccessor;
  * one {@code INBOUND} instance on {@code configureClientInboundChannel} and
  * one {@code OUTBOUND} instance on {@code configureClientOutboundChannel}.
  */
-public class TracingStompChannelInterceptor implements ChannelInterceptor {
+public class TracingStompChannelInterceptor implements ExecutorChannelInterceptor {
 
     public enum Direction { INBOUND, OUTBOUND }
 
@@ -62,6 +68,32 @@ public class TracingStompChannelInterceptor implements ChannelInterceptor {
     @Override
     public void afterSendCompletion(Message<?> message, MessageChannel channel,
                                     boolean sent, Exception ex) {
+        clearIfPopulated();
+    }
+
+    /**
+     * Runs on the thread that invokes the handler. With an executor-backed channel (Spring's
+     * default for the client-inbound channel) this is a worker thread, where {@link #preSend}'s
+     * MDC is not visible.
+     */
+    @Override
+    public Message<?> beforeHandle(Message<?> message, MessageChannel channel, MessageHandler handler) {
+        if (direction == Direction.INBOUND) {
+            StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
+            if (accessor != null) {
+                handleInbound(accessor);
+            }
+        }
+        return message;
+    }
+
+    @Override
+    public void afterMessageHandled(Message<?> message, MessageChannel channel, MessageHandler handler,
+                                    Exception ex) {
+        clearIfPopulated();
+    }
+
+    private void clearIfPopulated() {
         if (direction == Direction.INBOUND && Boolean.TRUE.equals(POPULATED.get())) {
             TraceContextCodec.clearMdc();
             MDC.remove("requestId");

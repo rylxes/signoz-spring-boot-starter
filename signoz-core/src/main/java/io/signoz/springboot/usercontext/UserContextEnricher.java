@@ -98,7 +98,7 @@ public class UserContextEnricher {
             Object principal = authentication.getClass()
                     .getMethod("getPrincipal").invoke(authentication);
             if (principal != null) {
-                String userId = extractPrincipalField(principal);
+                String userId = extractPrincipalField(principal, authentication);
                 if (userId != null) {
                     entries.put(MDC_USER_ID, userId);
                 }
@@ -132,10 +132,14 @@ public class UserContextEnricher {
     }
 
     /**
-     * Extracts the configured principal field from the principal object.
-     * Falls back to {@code toString()} if the field is not accessible.
+     * Extracts the configured principal field from the principal object, falling back to
+     * {@code Authentication.getName()}: the username for a {@code UserDetails} principal (Spring
+     * Security's own {@code User} has neither {@code getEmail()} nor {@code getName()}), the name
+     * for OAuth2 and {@code java.security.Principal} principals. It used to fall back to the
+     * principal's {@code toString()}, which for {@code User} is its whole description, authorities
+     * included.
      */
-    private String extractPrincipalField(Object principal) {
+    private String extractPrincipalField(Object principal, Object authentication) {
         if (principal instanceof String) {
             return (String) principal;
         }
@@ -151,17 +155,16 @@ public class UserContextEnricher {
         } catch (Exception ignored) {
             // fall through
         }
-        // Try getName() as fallback
+        // Then Spring Security's own notion of the user's name.
         try {
-            Method getName = principal.getClass().getMethod("getName");
-            Object value = getName.invoke(principal);
+            Object value = authentication.getClass().getMethod("getName").invoke(authentication);
             if (value != null) {
                 return value.toString();
             }
         } catch (Exception ignored) {
             // fall through
         }
-        return principal.toString();
+        return null;
     }
 
     /**

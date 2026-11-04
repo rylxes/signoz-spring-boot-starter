@@ -122,6 +122,24 @@ class ProfilesAndObjectMaskingTest {
     // --- profiles ---
 
     @Test
+    @DisplayName("in a JSON body the PAN's field strategy wins over the free-text card pattern")
+    void pciProfileInsideJson() {
+        // Default patterns on, as in an application: the 16-digit card pattern must not rewrite
+        // the PAN before the cardPan field strategy (keep BIN and last four) sees it.
+        SigNozLoggingProperties p = new SigNozLoggingProperties();
+        p.setProfiles(Arrays.asList("pci"));
+        MaskingRegistry r = new MaskingRegistry(p);
+
+        String masked = r.maskJsonString("{\"cardPan\":\"5061051234566567\",\"cvv\":\"" + CANARY
+                + "\",\"note\":\"paid with 4111 1111 1111 1111\"}");
+
+        assertThat(masked).contains("\"cardPan\":\"506105******6567\"")
+                .contains("\"cvv\":\"***\"")
+                .doesNotContain("5061051234566567").doesNotContain(CANARY)
+                .doesNotContain("4111 1111 1111 1111");   // an unlisted field still gets the pattern
+    }
+
+    @Test
     @DisplayName("the pci profile masks SAD entirely and keeps the PAN's BIN + last four")
     void pciProfile() {
         SigNozLoggingProperties p = props();

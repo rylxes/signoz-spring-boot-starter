@@ -267,9 +267,15 @@ when they switch threads. The starter's `TracingTaskDecorator` copies the MDC to
 - **A `ThreadPoolTaskExecutor` you create:** set the decorator yourself.
 - **A plain `ExecutorService`:** wrap it.
 
+> **If your application defines any `Executor` bean, check which one `@Async` uses.** Spring Boot
+> creates its executor only when there is no other `Executor` bean, and some libraries register
+> their own: WebSocket/STOMP's `@EnableWebSocketMessageBroker` does. Spring then runs `@Async`
+> methods on a plain `SimpleAsyncTaskExecutor` that nothing decorates, and their logs lose the
+> request's IDs. Declare an executor named `taskExecutor` with the decorator, as below.
+
 ```java
-@Bean
-ThreadPoolTaskExecutor reportExecutor(TracingTaskDecorator tracingTaskDecorator) {
+@Bean(name = "taskExecutor")   // the name @Async looks for when there are several executors
+ThreadPoolTaskExecutor taskExecutor(TracingTaskDecorator tracingTaskDecorator) {
     ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
     executor.setTaskDecorator(tracingTaskDecorator);
     return executor;

@@ -8,7 +8,6 @@ import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
-import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
@@ -39,7 +38,6 @@ import java.util.Set;
  * manually — all SigNoz enrichment still applies via Logback configuration.
  */
 @SupportedAnnotationTypes("io.signoz.springboot.annotation.SigNozLog")
-@SupportedSourceVersion(SourceVersion.RELEASE_8)
 public class SigNozLogProcessor extends AbstractProcessor {
 
     private Messager messager;
@@ -52,6 +50,15 @@ public class SigNozLogProcessor extends AbstractProcessor {
         this.messager = processingEnv.getMessager();
         this.filer = processingEnv.getFiler();
         this.injector = JavacLogInjector.tryCreate(processingEnv, messager);
+    }
+
+    /**
+     * Whatever the running compiler supports. A fixed {@code RELEASE_8} made javac warn
+     * "Supported source version 'RELEASE_8' ... less than -source" on every Java 11+ build.
+     */
+    @Override
+    public SourceVersion getSupportedSourceVersion() {
+        return SourceVersion.latestSupported();
     }
 
     @Override

@@ -4,6 +4,11 @@ import io.signoz.springboot.properties.SigNozUserContextProperties;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.userdetails.User;
+
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -92,5 +97,53 @@ class UserContextEnricherTest {
         assertThat(props.isExtractEmail()).isTrue();
         assertThat(props.isExtractRoles()).isTrue();
         assertThat(props.getPrincipalField()).isEqualTo("email");
+    }
+
+    @Test
+    void aUserDetailsPrincipalIsIdentifiedByItsUsername() {
+        // Spring Security's own User has neither getEmail() nor getName(): its userId used to be
+        // its whole toString(), authorities included.
+        User alice = new User("alice", "pw", AuthorityUtils.createAuthorityList("ROLE_USER", "ROLE_AUDITOR"));
+        UsernamePasswordAuthenticationToken auth =
+                new UsernamePasswordAuthenticationToken(alice, null, alice.getAuthorities());
+
+        Map<String, String> entries = new UserContextEnricher(new SigNozUserContextProperties()).extract(auth);
+
+        assertThat(entries).containsEntry(UserContextEnricher.MDC_USER_ID, "alice");
+        assertThat(entries.get(UserContextEnricher.MDC_USER_ROLES)).contains("ROLE_USER").contains("ROLE_AUDITOR");
+        assertThat(entries.values()).noneMatch(v -> v.contains("Password") || v.contains("Granted Authorities"));
+    }
+
+    @Test
+    void theConfiguredPrincipalFieldIsUsedWhenThePrincipalHasIt() {
+        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                new EmailPrincipal("alice@example.com"), null, AuthorityUtils.createAuthorityList("ROLE_USER"));
+
+        Map<String, String> entries = new UserContextEnricher(new SigNozUserContextProperties()).extract(auth);
+
+        assertThat(entries).containsEntry(UserContextEnricher.MDC_USER_ID, "alice@example.com")
+                .containsEntry(UserContextEnricher.MDC_USER_EMAIL, "alice@example.com");
+    }
+
+    @Test
+    void aStringPrincipalIsItsOwnName() {
+        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                "bob", null, AuthorityUtils.createAuthorityList("ROLE_USER"));
+
+        assertThat(new UserContextEnricher(new SigNozUserContextProperties()).extract(auth))
+                .containsEntry(UserContextEnricher.MDC_USER_ID, "bob");
+    }
+
+    /** A custom principal exposing an email, as many applications' user classes do. */
+    public static class EmailPrincipal {
+        private final String email;
+
+        EmailPrincipal(String email) {
+            this.email = email;
+        }
+
+        public String getEmail() {
+            return email;
+        }
     }
 }

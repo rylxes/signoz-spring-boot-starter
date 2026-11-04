@@ -120,6 +120,34 @@
   `micrometer-core` failed to start with `ClassNotFoundException: MeterRegistry`.
   `@Timed` and `@AlertOnFailure` now log without it, as documented; metrics are
   still recorded when a `MeterRegistry` bean exists.
+- **WebClient calls were often not traced.** The starter's `WebClientCustomizer` bean was
+  declared with return type `Object`, so Spring Boot only found it if it already existed when
+  a `WebClient.Builder` was created. A builder injected into an application bean (the usual
+  case) missed it: those calls carried no `traceparent` or `X-Request-ID` and were not logged.
+  Affects Spring MVC and WebFlux applications alike.
+- **User context on Spring MVC never appeared.** The servlet `UserContextMdcFilter` ran before
+  Spring Security's filter chain, so it always found the request unauthenticated and added no
+  `userId`, `userEmail` or `userRoles`. It now runs after the chain (order 0), as the WebFlux
+  filter already did.
+- **`userId` for Spring Security's `User` principal was its `toString()`**, a description
+  including the account's authorities, because `User` has neither `getEmail()` nor `getName()`.
+  When the configured `signoz.user-context.principal-field` is not available, `userId` is now
+  `Authentication.getName()`: the username, or the name of an OAuth2 or `Principal` principal.
+- **STOMP `@MessageMapping` handlers had no trace in their logs.** Spring's client-inbound
+  channel runs handlers on its own executor, but the MDC was set on the thread that sent the
+  frame into the channel. It is now also set on the handler's thread, from the frame's
+  `traceparent` or the one captured at the handshake.
+- **The `pci` profile and `field-strategies` did not apply inside JSON bodies.** The free-text
+  card-number pattern ran first, so a PAN under `cardPan` became `[card-number-redacted]` and
+  the field's partial mask was applied to that placeholder (`[card-************ted]`) instead of
+  keeping the BIN and last four. Field rules now run before the free-text patterns.
+- **Startup warnings in applications with a `DataSource`.** Spring Boot 3.2 logged that
+  `SigNozDatabaseAutoConfiguration` and `SigNozDatabaseProperties` were "not eligible for getting
+  processed by all BeanPostProcessors". The slow-query post-processor is now declared so that
+  nothing is created early.
+- **`@SigNozLog` compiler warning:** builds at Java 11 and later warned "Supported source version
+  'RELEASE_8' from annotation processor ... less than -source". The processor now supports the
+  running compiler's version.
 
 ### Internal
 
