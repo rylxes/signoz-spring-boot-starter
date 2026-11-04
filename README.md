@@ -22,8 +22,9 @@ audit trails, and JVM/HTTP metrics — with no code changes required.
 | **OTLP log export** | `OtlpLogbackAppender` ships logs directly to SigNoz collector |
 | **Field masking** | `@Masked` on parameters; built-in rules for passwords, tokens, credit cards, SSNs |
 | **Distributed tracing** | `@Traced` creates OpenTelemetry spans; trace-ID injected into MDC automatically |
-| **HTTP logging** | `HttpLoggingFilter` logs method, path, status, duration for every request |
-| **Agentless trace correlation** | `TraceIdMdcFilter` reuses inbound `traceparent` / `X-Request-ID` and emits both on the response — end-to-end log correlation across services without running an OTEL agent |
+| **HTTP logging** | `HttpLoggingFilter` (servlet) / `HttpLoggingWebFilter` (WebFlux) logs method, path, status, duration for every request |
+| **Agentless trace correlation** | `TraceIdMdcFilter` (servlet) / `TraceIdWebFilter` (WebFlux) reuses inbound `traceparent` / `X-Request-ID` and emits both on the response — end-to-end log correlation across services without running an OTEL agent |
+| **WebFlux support** | Reactive `WebFilter`s for trace IDs, HTTP logging and user context; on Spring Boot 3 the MDC follows each request across Reactor thread hops. See [WebFlux](#webflux-reactive-applications) |
 | **Audit trail** | `@AuditLog` publishes a structured `AuditEvent` (actor, action, outcome, args) |
 | **JVM + HTTP metrics** | Micrometer OTLP registry sends metrics to SigNoz automatically |
 | **Compile-time logger** | `@SigNozLog` injects `private static final Logger log` via APT (like `@Slf4j`) |
@@ -36,7 +37,7 @@ audit trails, and JVM/HTTP metrics — with no code changes required.
 | **WebSocket / STOMP trace propagation** | Handshake interceptor captures inbound `traceparent` on the upgrade; `ChannelInterceptor` propagates per-frame. Auto-skipped when the OTel Java Agent is on |
 | **Slow query detection** | DataSource proxy times SQL queries, WARN above threshold (default 500ms) |
 | **Startup diagnostics** | Logs full config summary at boot — what's enabled, endpoints, thresholds |
-| **User context enrichment** | Extracts `userId`/`userEmail`/`userRoles` from SecurityContext into MDC |
+| **User context enrichment** | Extracts `userId`/`userEmail`/`userRoles` from SecurityContext (or the reactive SecurityContext in WebFlux) into MDC |
 | **Error fingerprinting** | SHA-256 hash of exception type + stack → stable `errorId` in MDC for grouping |
 | **Async context propagation** | `TracingTaskDecorator` copies MDC (traceId, requestId) to `@Async` worker threads |
 | **Log sampling** | Probabilistic filtering — reduce INFO volume while ERROR/WARN always pass |
@@ -414,8 +415,13 @@ request.
 The identity comes from whichever of these is available:
 
 1. The active OTEL `SpanContext` (agent or SDK path).
-2. MDC values populated by [`TraceIdMdcFilter`](#agentless-trace-propagation) —
-   so header propagation still works end-to-end in fully agentless deployments.
+2. For `WebClient` in a WebFlux app: the request's IDs in the Reactor context,
+   stored there by [`TraceIdWebFilter`](#webflux-reactive-applications), so they
+   survive thread hops.
+3. MDC values populated by [`TraceIdMdcFilter`](#agentless-trace-propagation)
+   (`trace_id` / `span_id` / `trace_flags`, falling back to the legacy
+   `traceId` / `spanId` / `traceFlags` keys) — so header propagation still works
+   end-to-end in fully agentless deployments.
 
 ```yaml
 signoz:
@@ -722,6 +728,8 @@ signoz:
 ```
 
 > Requires Spring Security on the classpath. Uses reflection — no hard dependency.
+> In a WebFlux app the same keys are read from `ReactiveSecurityContextHolder` by
+> `UserContextWebFilter`, which runs after Spring Security's filter chain.
 
 ---
 
@@ -754,6 +762,57 @@ signoz:
   web:
     log-request-body: false
     log-response-body: false
+```
+
+---
+
+## WebFlux (Reactive) Applications
+
+In a Spring WebFlux application the starter registers reactive `WebFilter`s in
+place of the servlet filters. All `signoz.web.*` and `signoz.user-context.*`
+properties apply unchanged.
+
+| Servlet filter | WebFlux filter | Order |
+|---|---|---|
+| `TraceIdMdcFilter` | `TraceIdWebFilter` | `HIGHEST_PRECEDENCE + 1` |
+| `HttpLoggingFilter` | `HttpLoggingWebFilter` | `HIGHEST_PRECEDENCE + 2` |
+| `UserContextMdcFilter` | `UserContextWebFilter` | `0` (after Spring Security's `-100`) |
+
+What you get per request:
+
+- `X-Request-ID` and `traceparent` response headers, resolved exactly like the
+  servlet filter (active OTel span → inbound `traceparent` → inbound
+  `X-Request-ID` → fresh IDs).
+- One `SIGNOZ_HTTP` access-log line with method, path, query, status, duration,
+  and optionally masked headers and bounded, masked bodies. Failed requests are
+  logged with the status the error handler actually sent (for example 404 for a
+  `ResponseStatusException`), plus `error=<exception class>`.
+- `requestId`, `trace_id`, `span_id`, `trace_flags` (and `userId`, `userEmail`,
+  `userRoles` for authenticated users) in the MDC of your handler's logs, and in
+  the Reactor context under `ReactiveMdc.CONTEXT_KEY`.
+- Outbound `WebClient` calls carry the request's `traceparent` and
+  `X-Request-ID`, even after thread hops.
+
+**MDC across thread hops.** Reactive handlers often continue on another thread
+(`publishOn`, a `WebClient` response, a reactive driver). On **Spring Boot 3** the
+starter registers a context-propagation `ThreadLocalAccessor` for the SigNoz MDC
+and enables Reactor's automatic context propagation (the same switch as
+`spring.reactor.context-propagation=auto`), so every log line in the pipeline
+keeps its IDs. To opt out:
+
+```yaml
+signoz:
+  web:
+    reactive-context-propagation: false
+```
+
+On **Spring Boot 2** (Reactor 3.4 has no automatic propagation), and with the
+switch above off, the MDC is set until the handler's first thread hop. After it,
+log through `ReactiveMdc`, which reads the IDs from the Reactor context:
+
+```java
+return webClient.get().uri("/inventory").retrieve().bodyToMono(Stock.class)
+        .doOnEach(ReactiveMdc.onNext(stock -> log.info("stock {}", stock.count())));
 ```
 
 ---

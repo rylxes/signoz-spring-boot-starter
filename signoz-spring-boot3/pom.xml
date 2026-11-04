@@ -90,11 +90,20 @@
             <artifactId>logstash-logback-encoder</artifactId>
         </dependency>
 
-        <!-- Spring WebFlux (optional — for WebClient tracing) -->
+        <!-- Spring WebFlux (optional — for WebClient tracing and reactive WebFilters) -->
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-webflux</artifactId>
             <optional>true</optional>
+        </dependency>
+
+        <!-- Restores the SigNoz MDC on every Reactor thread hop in WebFlux apps
+             (ThreadLocalAccessor + Hooks.enableAutomaticContextPropagation). Tiny, no
+             transitive dependencies; inert outside reactive web applications. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>context-propagation</artifactId>
+            <version>${context-propagation.version}</version>
         </dependency>
 
         <!-- Config processor for IDE autocomplete -->
@@ -112,6 +121,12 @@
         </dependency>
         <!-- spring-boot-starter-web is already in main scope as optional=true,
              which puts it on the compile AND test classpath; no extra test entry needed. -->
+        <!-- ReactiveSecurityContextHolder for the reactive user-context tests -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-core</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- OTel SDK: used to supply OpenTelemetry.noop() in integration tests -->
         <dependency>
             <groupId>io.opentelemetry</groupId>

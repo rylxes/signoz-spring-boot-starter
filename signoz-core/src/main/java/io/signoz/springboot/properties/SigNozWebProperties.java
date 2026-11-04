@@ -66,6 +66,14 @@ public class SigNozWebProperties {
     /** Whether to include query string parameters in the logged URI. */
     private boolean logQueryString = true;
 
+    /**
+     * WebFlux, Spring Boot 3 only: register a context-propagation accessor for the
+     * SigNoz MDC and enable Reactor's automatic context propagation, so handler logs
+     * keep their requestId/trace IDs after thread hops. When {@code false}, the MDC is
+     * present only up to a handler's first asynchronous boundary.
+     */
+    private boolean reactiveContextPropagation = true;
+
     // --- Getters & Setters ---
 
     public boolean isLogRequests() { return logRequests; }
@@ -85,6 +93,11 @@ public class SigNozWebProperties {
 
     public boolean isLogHeaders() { return logHeaders; }
     public void setLogHeaders(boolean logHeaders) { this.logHeaders = logHeaders; }
+
+    public boolean isReactiveContextPropagation() { return reactiveContextPropagation; }
+    public void setReactiveContextPropagation(boolean reactiveContextPropagation) {
+        this.reactiveContextPropagation = reactiveContextPropagation;
+    }
 
     public boolean isLogQueryString() { return logQueryString; }
     public void setLogQueryString(boolean logQueryString) { this.logQueryString = logQueryString; }
