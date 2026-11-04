@@ -86,6 +86,12 @@
   wherever fields are masked by name: JSON, `key=value`, query strings, headers, MDC, XML and
   `ObjectMasker`. Set `masked-field-suffixes: []` to keep the previous behaviour; note that
   names such as `nextPageToken` are now masked by default.
+- **Security:** a secret nested in a percent-encoded query value was logged in clear, because
+  no pattern matches the encoded text. The common case is an OAuth
+  `redirect_uri=https%3A%2F%2Fapp%2Fcb%3Faccess_token%3D...`; a card number written as
+  `4111+1111+1111+1111` was missed the same way. Inbound and outbound HTTP logs now decode
+  such a value (up to three levels of nesting), mask its content with the usual rules and log
+  it re-encoded. Values with nothing to mask are logged exactly as they arrived.
 - **Startup crash without Micrometer:** an application without Actuator or
   `micrometer-core` failed to start with `ClassNotFoundException: MeterRegistry`.
   `@Timed` and `@AlertOnFailure` now log without it, as documented; metrics are

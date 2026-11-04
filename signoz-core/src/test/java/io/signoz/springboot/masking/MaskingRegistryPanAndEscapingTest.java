@@ -4,6 +4,8 @@ import io.signoz.springboot.properties.SigNozLoggingProperties;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.util.Arrays;
 import java.util.Collections;
 
@@ -170,6 +172,79 @@ class MaskingRegistryPanAndEscapingTest {
 
         assertThat(new MaskingRegistry(props).maskQueryString("token=" + CANARY))
                 .isEqualTo("token=" + CANARY);
+    }
+
+    // --- secrets nested inside an encoded query value ---
+
+    @Test
+    @DisplayName("A secret inside an encoded URL in another parameter is masked; the rest stays readable")
+    void masksSecretInsideEncodedNestedUrl() throws Exception {
+        MaskingRegistry registry = new MaskingRegistry(new SigNozLoggingProperties());
+        String nested = "https://app.example.com/cb?access_token=" + CANARY + "&state=xyz";
+
+        String masked = registry.maskQueryString(
+                "client_id=web&redirect_uri=" + URLEncoder.encode(nested, "UTF-8") + "&page=2");
+
+        assertThat(masked).doesNotContain(CANARY).startsWith("client_id=web&redirect_uri=").endsWith("&page=2");
+        String loggedRedirect = masked.substring("client_id=web&redirect_uri=".length(), masked.length() - "&page=2".length());
+        assertThat(URLDecoder.decode(loggedRedirect, "UTF-8"))
+                .isEqualTo("https://app.example.com/cb?access_token=***&state=xyz");
+    }
+
+    @Test
+    @DisplayName("Double-encoded nesting is followed too")
+    void masksDoubleEncodedNestedSecret() throws Exception {
+        MaskingRegistry registry = new MaskingRegistry(new SigNozLoggingProperties());
+        String inner = "https://idp/cb?token=" + CANARY;
+        String outer = "https://app/login?next=" + URLEncoder.encode(inner, "UTF-8");
+
+        assertThat(registry.maskQueryString("return=" + URLEncoder.encode(outer, "UTF-8")))
+                .doesNotContain(CANARY);
+    }
+
+    @Test
+    @DisplayName("An encoded form body or card number in a value is masked once decoded")
+    void masksEncodedPayloadsInValues() throws Exception {
+        MaskingRegistry registry = new MaskingRegistry(new SigNozLoggingProperties());
+
+        assertThat(registry.maskQueryString("payload=" + URLEncoder.encode("user=ada&password=" + CANARY, "UTF-8")))
+                .doesNotContain(CANARY).contains("ada");
+        assertThat(registry.maskQueryString("note=4111+1111+1111+1111")).doesNotContain("1111+1111");
+        assertThat(registry.maskQueryString("note=4111%201111%201111%201111")).doesNotContain("1111%201111");
+    }
+
+    @Test
+    @DisplayName("Encoded values with nothing sensitive are logged exactly as they arrived")
+    void keepsOrdinaryEncodedValuesByteForByte() {
+        MaskingRegistry registry = new MaskingRegistry(new SigNozLoggingProperties());
+
+        for (String query : new String[]{"q=spring+boot%20starter&page=2",
+                "redirect_uri=https%3A%2F%2Fapp%2Fcb%3Fstate%3Dxyz", "a=%zz&b=%", "path=%2Fa%2Fb"}) {
+            assertThat(registry.maskQueryString(query)).isEqualTo(query);
+        }
+    }
+
+    @Test
+    @DisplayName("A rewritten value stays encoded, so a decoded line break cannot reach the log")
+    void rewrittenValueStaysEncoded() {
+        MaskingRegistry registry = new MaskingRegistry(new SigNozLoggingProperties());
+
+        String masked = registry.maskQueryString("note=x%0D%0Afake%20line%26token%3D" + CANARY);
+
+        assertThat(masked).doesNotContain(CANARY).doesNotContain("\r").doesNotContain("\n").contains("%0D%0A");
+    }
+
+    @Test
+    @DisplayName("Nesting deeper than the limit is left as it is rather than decoded without end")
+    void stopsAtTheNestingLimit() throws Exception {
+        MaskingRegistry registry = new MaskingRegistry(new SigNozLoggingProperties());
+        String value = "token=" + CANARY;
+        for (int i = 0; i < 5; i++) {
+            value = URLEncoder.encode(value, "UTF-8");
+        }
+        String query = "deep=" + value;
+
+        assertThat(registry.maskQueryString(query)).isEqualTo(query);
     }
 
     @Test
