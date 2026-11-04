@@ -17,6 +17,7 @@ import org.springframework.boot.web.client.RestTemplateCustomizer;
 import org.springframework.boot.web.reactive.function.client.WebClientCustomizer;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
@@ -27,14 +28,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 /**
  * The outbound clients only mask the query strings they log if the auto-configuration hands them
  * the application's {@link MaskingRegistry}; a client built without one logs the query as is.
  *
- * <p>The WebClient tests make a real call through a customized {@link WebClient} against a
- * Spring-built {@link ClientResponse}, so they fail if the filter calls a method that this Spring
- * version no longer has (as {@code ClientResponse.rawStatusCode()}, removed in Spring 6.1, did on Spring Boot 3).
+ * <p>The status tests make a real call through a customized client against a response built by
+ * Spring, not a mock, so they fail if the client calls a status method this Spring version no
+ * longer has ({@code ClientResponse.rawStatusCode()} is gone from Spring 6.1, and
+ * {@code ClientHttpResponse.getRawStatusCode()} from Spring 7.0).
  */
 class SigNozOutboundAutoConfigurationTest {
 
@@ -88,6 +92,22 @@ class SigNozOutboundAutoConfigurationTest {
                     .findFirst().orElseThrow(AssertionError::new);
             assertThat(ReflectionTestUtils.getField(filter, "maskingRegistry"))
                     .isSameAs(ctx.getBean(MaskingRegistry.class));
+        });
+    }
+
+    @Test
+    void restTemplateCallLogsTheResponseStatus() {
+        runner.run(ctx -> {
+            RestTemplate restTemplate = new RestTemplate();
+            ctx.getBean("sigNozRestTemplateCustomizer", RestTemplateCustomizer.class).customize(restTemplate);
+            MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
+            server.expect(requestTo("https://api.example.com/orders")).andRespond(withStatus(HttpStatus.CREATED));
+
+            restTemplate.getForEntity("https://api.example.com/orders", String.class);
+
+            server.verify();
+            assertThat(lastLine()).matches(
+                    "\\[SigNoz] Outbound GET https://api\\.example\\.com/orders -> 201 in \\d+ms");
         });
     }
 

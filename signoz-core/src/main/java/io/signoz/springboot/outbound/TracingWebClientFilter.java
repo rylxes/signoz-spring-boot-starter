@@ -15,7 +15,6 @@ import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 import org.springframework.web.reactive.function.client.ExchangeFunction;
 import reactor.core.publisher.Mono;
 
-import java.lang.reflect.Method;
 import java.util.Map;
 
 /**
@@ -34,39 +33,11 @@ public class TracingWebClientFilter implements ExchangeFilterFunction {
     private static final Logger logger = LoggerFactory.getLogger("SIGNOZ_OUTBOUND");
 
     /**
-     * How the response status is read, resolved once. This module compiles against Spring 5,
-     * where {@code ClientResponse.rawStatusCode()} exists, but Spring 6.1 removed that method,
-     * so calling it directly is a {@link NoSuchMethodError} on Spring Boot 3.2+. And
-     * {@code statusCode()} returns {@code HttpStatus} on Spring 5 but {@code HttpStatusCode} on
-     * Spring 6, so a direct call to it fails on Spring 6 too.
-     *
-     * <p>Where {@code rawStatusCode()} exists it is used, because Spring 5's {@code statusCode()}
-     * throws for a non-standard code such as 499. Otherwise {@code statusCode()} and then
-     * {@code value()} on its declared return type are used.
+     * Reads the status on Spring 5, 6 and 7: {@code ClientResponse.rawStatusCode()} was removed in
+     * Spring 6.1. See {@link ResponseStatusReader}.
      */
-    private static final Method RAW_STATUS_CODE;
-    private static final Method STATUS_CODE;
-    private static final Method STATUS_VALUE;
-
-    static {
-        Method rawStatusCode = null;
-        Method statusCode = null;
-        Method statusValue = null;
-        try {
-            rawStatusCode = ClientResponse.class.getMethod("rawStatusCode");
-        } catch (NoSuchMethodException | RuntimeException notOnThisSpringVersion) {
-            try {
-                statusCode = ClientResponse.class.getMethod("statusCode");
-                statusValue = statusCode.getReturnType().getMethod("value");
-            } catch (NoSuchMethodException | RuntimeException ignored) {
-                // The status is logged as -1 rather than failing the exchange.
-                statusCode = null;
-            }
-        }
-        RAW_STATUS_CODE = rawStatusCode;
-        STATUS_CODE = statusCode;
-        STATUS_VALUE = statusValue;
-    }
+    private static final ResponseStatusReader STATUS =
+            new ResponseStatusReader(ClientResponse.class, "rawStatusCode", "statusCode");
 
     private final SigNozOutboundProperties properties;
     private final MaskingRegistry maskingRegistry;
@@ -125,7 +96,7 @@ public class TracingWebClientFilter implements ExchangeFilterFunction {
                             logger.info("[SigNoz] Outbound {} {} -> {} in {}ms",
                                     modifiedRequest.method(),
                                     OutboundUrl.forLog(modifiedRequest.url(), maskingRegistry),
-                                    statusCode(response),
+                                    STATUS.read(response),
                                     duration);
                         }
                     })
@@ -141,30 +112,6 @@ public class TracingWebClientFilter implements ExchangeFilterFunction {
                         }
                     });
         });
-    }
-
-    /**
-     * Returns the response's HTTP status code on Spring 5 and Spring 6, or {@code -1} when it
-     * cannot be read. Never throws, so logging cannot fail the exchange.
-     *
-     * @param response the response; {@code null} when the exchange completed empty
-     * @return the status code, or {@code -1}
-     */
-    static int statusCode(ClientResponse response) {
-        if (response == null) {
-            return -1;
-        }
-        try {
-            if (RAW_STATUS_CODE != null) {
-                return (Integer) RAW_STATUS_CODE.invoke(response);
-            }
-            if (STATUS_CODE != null && STATUS_VALUE != null) {
-                return (Integer) STATUS_VALUE.invoke(STATUS_CODE.invoke(response));
-            }
-        } catch (ReflectiveOperationException | RuntimeException ignored) {
-            // Fall through: the status is logged as -1.
-        }
-        return -1;
     }
 
     /**

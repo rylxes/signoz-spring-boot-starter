@@ -10,7 +10,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.reactive.function.client.ClientRequest;
 import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.ExchangeFunction;
-import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -77,24 +76,5 @@ class TracingWebClientFilterTest {
 
         assertThat(sent.get().headers().containsKey("traceparent")).isFalse();
         assertThat(sent.get().headers().containsKey("X-Request-ID")).isFalse();
-    }
-
-    @Test
-    void readsTheResponseStatus() {
-        assertThat(TracingWebClientFilter.statusCode(ClientResponse.create(HttpStatus.CREATED).build()))
-                .isEqualTo(201);
-    }
-
-    @Test
-    void readsANonStandardResponseStatus() {
-        // Spring 5's statusCode() throws for a code with no HttpStatus constant.
-        ClientResponse response = ClientResponse.create(499, ExchangeStrategies.withDefaults()).build();
-
-        assertThat(TracingWebClientFilter.statusCode(response)).isEqualTo(499);
-    }
-
-    @Test
-    void reportsMinusOneForAnEmptyExchange() {
-        assertThat(TracingWebClientFilter.statusCode(null)).isEqualTo(-1);
     }
 }
