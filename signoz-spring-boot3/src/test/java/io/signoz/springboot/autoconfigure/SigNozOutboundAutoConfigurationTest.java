@@ -36,7 +36,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The outbound clients only mask the query strings they log if the auto-configuration hands them
- * the application's {@link MaskingRegistry}; a client built without one logs the query as is.
+ * the application's {@link MaskingRegistry}; a client built without one falls back to the default
+ * rules and ignores {@code signoz.logging.*} customisations.
  */
 class SigNozOutboundAutoConfigurationTest {
 

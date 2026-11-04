@@ -179,6 +179,49 @@ class OutboundUrlMaskingTest {
                 .doesNotContain(CANARY);
     }
 
+    // --- Clients built without a MaskingRegistry ---
+
+    @Test
+    void restTemplateWithoutARegistryMasksWithTheDefaultRules() throws IOException {
+        ClientHttpResponse response = mock(ClientHttpResponse.class);
+        when(response.getRawStatusCode()).thenReturn(200);
+        ClientHttpRequestExecution execution = mock(ClientHttpRequestExecution.class);
+        when(execution.execute(any(), any(byte[].class))).thenReturn(response);
+
+        new TracingRestTemplateInterceptor(new SigNozOutboundProperties())
+                .intercept(restTemplateRequest(), new byte[0], execution);
+
+        assertThat(singleLogLine())
+                .contains("Outbound GET https://api.example.com/v1/items?page=2&access_token=*** -> 200")
+                .doesNotContain(CANARY);
+    }
+
+    @Test
+    void webClientWithoutARegistryMasksWithTheDefaultRules() {
+        ClientRequest request = ClientRequest.create(HttpMethod.GET, SENSITIVE_URI).build();
+
+        new TracingWebClientFilter(new SigNozOutboundProperties(), null)
+                .filter(request, r -> Mono.just(ClientResponse.create(HttpStatus.OK).build()))
+                .block();
+
+        assertThat(singleLogLine())
+                .contains("Outbound GET https://api.example.com/v1/items?page=2&access_token=*** -> 200")
+                .doesNotContain(CANARY);
+    }
+
+    @Test
+    void anExplicitRegistryStillWinsOverTheDefaultRules() {
+        SigNozLoggingProperties logging = new SigNozLoggingProperties();
+        logging.setMaskedFields(java.util.Collections.singletonList("page"));
+        ClientRequest request = ClientRequest.create(HttpMethod.GET, SENSITIVE_URI).build();
+
+        new TracingWebClientFilter(new SigNozOutboundProperties(), new MaskingRegistry(logging))
+                .filter(request, r -> Mono.just(ClientResponse.create(HttpStatus.OK).build()))
+                .block();
+
+        assertThat(singleLogLine()).contains("?page=***&");
+    }
+
     private static HttpRequest restTemplateRequest() {
         HttpRequest request = mock(HttpRequest.class);
         when(request.getMethod()).thenReturn(HttpMethod.GET);

@@ -1,6 +1,7 @@
 package io.signoz.springboot.outbound;
 
 import io.signoz.springboot.masking.MaskingRegistry;
+import io.signoz.springboot.properties.SigNozLoggingProperties;
 
 import java.net.URI;
 
@@ -22,6 +23,23 @@ import java.net.URI;
 final class OutboundUrl {
 
     private OutboundUrl() {
+    }
+
+    /**
+     * Returns {@code registry}, or a shared registry with the default masking rules when it is
+     * {@code null}. Outbound clients built without a registry, through their single-argument
+     * constructors, still mask sensitive query parameters such as {@code access_token}.
+     *
+     * @param registry the application's masking registry; may be {@code null}
+     * @return a non-null masking registry
+     */
+    static MaskingRegistry orDefault(MaskingRegistry registry) {
+        return registry != null ? registry : DefaultRegistry.INSTANCE;
+    }
+
+    /** Built on first use, so clients given a registry never construct the default one. */
+    private static final class DefaultRegistry {
+        static final MaskingRegistry INSTANCE = new MaskingRegistry(new SigNozLoggingProperties());
     }
 
     /**

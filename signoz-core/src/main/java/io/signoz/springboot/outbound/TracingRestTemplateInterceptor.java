@@ -40,9 +40,10 @@ public class TracingRestTemplateInterceptor implements ClientHttpRequestIntercep
     private final MaskingRegistry maskingRegistry;
 
     /**
-     * Creates a new interceptor that removes user info from logged URLs but does not mask their
-     * query strings. Prefer {@link #TracingRestTemplateInterceptor(SigNozOutboundProperties,
-     * MaskingRegistry)}.
+     * Creates a new interceptor that masks logged query strings with the default masking rules,
+     * ignoring {@code signoz.logging.*} customisations. Prefer
+     * {@link #TracingRestTemplateInterceptor(SigNozOutboundProperties, MaskingRegistry)} with the
+     * application's registry.
      *
      * @param properties outbound tracing configuration
      */
@@ -54,12 +55,13 @@ public class TracingRestTemplateInterceptor implements ClientHttpRequestIntercep
      * Creates a new interceptor.
      *
      * @param properties      outbound tracing configuration
-     * @param maskingRegistry masks sensitive query parameters in logged URLs; may be {@code null}
+     * @param maskingRegistry masks sensitive query parameters in logged URLs; {@code null} uses
+     *                        the default masking rules
      */
     public TracingRestTemplateInterceptor(SigNozOutboundProperties properties,
                                           MaskingRegistry maskingRegistry) {
         this.properties = properties;
-        this.maskingRegistry = maskingRegistry;
+        this.maskingRegistry = OutboundUrl.orDefault(maskingRegistry);
     }
 
     @Override

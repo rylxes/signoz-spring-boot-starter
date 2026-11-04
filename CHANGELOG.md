@@ -76,7 +76,9 @@
   exception that quoted the URL repeated it. `signoz.outbound.log-requests` is on by default.
   The logged URL now has sensitive query parameters masked the same way as inbound requests,
   user info (`https://user:pass@host`) replaced with `***` and the fragment dropped; the URL
-  inside a logged exception message is masked too.
+  inside a logged exception message is masked too. A `TracingRestTemplateInterceptor` or
+  `TracingWebClientFilter` built without a `MaskingRegistry` (for example through its
+  single-argument constructor) masks with the default rules instead of logging the query as is.
 - **Security:** field names matched only as listed, apart from case. `access_token` in
   `masked-fields` left `accessToken` and `access-token` in clear, and names no list
   anticipates, such as `auth_token`, `clientSecret` or `X-Amz-Signature`, were never masked.
