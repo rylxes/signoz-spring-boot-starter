@@ -66,6 +66,21 @@ class OtlpLog4j2AppenderTest {
     }
 
     @Test
+    void setsTheRecordTraceContextFromTheThreadContext() {
+        SortedArrayStringMap context = new SortedArrayStringMap();
+        context.putValue("trace_id", "0af7651916cd43dd8448eb211c80319c");
+        context.putValue("span_id", "b7ad6b7169203331");
+
+        appender.append(event(Level.INFO, "ok", context, null));
+
+        ArgumentCaptor<io.opentelemetry.context.Context> ctx =
+                ArgumentCaptor.forClass(io.opentelemetry.context.Context.class);
+        verify(record).setContext(ctx.capture());
+        assertThat(io.opentelemetry.api.trace.Span.fromContext(ctx.getValue()).getSpanContext().getTraceId())
+                .isEqualTo("0af7651916cd43dd8448eb211c80319c");
+    }
+
+    @Test
     void addsErrorIdOnlyForErrorsWithAThrowable() {
         appender.append(event(Level.ERROR, "failed", new SortedArrayStringMap(), new IllegalStateException()));
         ArgumentCaptor<String> errorId = ArgumentCaptor.forClass(String.class);

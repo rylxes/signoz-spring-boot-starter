@@ -11,11 +11,25 @@ need to specify what you want to change.
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `signoz.enabled` | `boolean` | `true` | Master switch. Set to `false` to disable the entire starter without removing the dependency. |
-| `signoz.endpoint` | `String` | `http://localhost:4317` | OTLP gRPC endpoint for the SigNoz collector (or SigNoz cloud ingest URL). |
+| `signoz.endpoint` | `String` | `http://localhost:4317` | OTLP endpoint: the SigNoz collector or SigNoz Cloud ingest URL, a Grafana Cloud OTLP gateway, or any OTLP receiver. See `signoz.exporter.*` for protocol and per-signal endpoints. |
 | `signoz.service-name` | `String` | `application` | Logical service name shown in SigNoz traces, logs, and metrics. |
 | `signoz.service-version` | `String` | `unknown` | Semantic version string attached to all telemetry (e.g. `1.2.3`). |
 | `signoz.environment` | `String` | `default` | Deployment environment tag (e.g. `production`, `staging`, `dev`). |
 | `signoz.headers` | `Map<String, String>` | `{}` | Custom headers sent with all OTLP export requests. Required for SigNoz Cloud authentication (e.g. `signoz-ingestion-key`). Ignored when the OpenTelemetry Java Agent is active. |
+
+## Exporter properties (`signoz.exporter.*`)
+
+Apply to logs, traces and metrics alike. The defaults keep the original behaviour: OTLP gRPC to `signoz.endpoint`.
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `signoz.exporter.backend` | `signoz` \| `grafana-cloud` \| `otlp` | `signoz` | Sets defaults only. `grafana-cloud` implies `protocol: http/protobuf`. |
+| `signoz.exporter.protocol` | `grpc` \| `http/protobuf` | backend's default | `grpc` for `signoz`/`otlp`, `http/protobuf` for `grafana-cloud`. With `http/protobuf` and `signoz.endpoint` left at its default, port 4318 is used. |
+| `signoz.exporter.logs-endpoint` | `String` | derived | Full logs endpoint. Unset: over HTTP, `signoz.endpoint` + `/v1/logs`; over gRPC, `signoz.endpoint`. |
+| `signoz.exporter.traces-endpoint` | `String` | derived | As above, with `/v1/traces`. |
+| `signoz.exporter.metrics-endpoint` | `String` | derived | As above, with `/v1/metrics`. Also used by the Micrometer OTLP registry over HTTP. |
+| `signoz.exporter.basic-auth.username` | `String` | | Sent as `Authorization: Basic …` (Grafana Cloud: instance ID). Not added if `signoz.headers` already has an `Authorization` header. |
+| `signoz.exporter.basic-auth.password` | `String` | | Grafana Cloud: an access policy token with write scopes. Never logged. |
 
 ### SigNoz Cloud example
 

@@ -5,6 +5,7 @@ import io.signoz.springboot.errors.ErrorFingerprintTurboFilter;
 import io.signoz.springboot.logging.OtlpLogbackAppender;
 import io.signoz.springboot.logging.SamplingTurboFilter;
 import io.signoz.springboot.logging.SigNozJsonEncoder;
+import io.signoz.springboot.export.OtlpExporterSettings;
 import io.signoz.springboot.masking.MaskingRegistry;
 import io.signoz.springboot.properties.SigNozErrorProperties;
 import io.signoz.springboot.properties.SigNozLoggingProperties;
@@ -119,15 +120,18 @@ public class SigNozLoggingAutoConfiguration {
                     OtlpLogbackAppender otlpAppender = new OtlpLogbackAppender();
                     otlpAppender.setName("SIGNOZ_OTLP");
                     otlpAppender.setContext(context);
-                    otlpAppender.setEndpoint(props.getEndpoint());
+                    OtlpExporterSettings exportSettings = OtlpExporterSettings.resolve(props);
+                    otlpAppender.setEndpoint(exportSettings.endpoint(OtlpExporterSettings.Signal.LOGS));
+                    otlpAppender.setProtocol(exportSettings.getProtocolName());
                     otlpAppender.setServiceName(props.getServiceName());
                     otlpAppender.setServiceVersion(props.getServiceVersion());
                     otlpAppender.setEnvironment(props.getEnvironment());
-                    otlpAppender.setHeaders(props.getHeaders());
+                    otlpAppender.setHeaders(exportSettings.getHeaders());
                     otlpAppender.setMaskingRegistry(maskingRegistry);
                     otlpAppender.start();
                     rootLogger.addAppender(otlpAppender);
-                    log.info("[SigNoz] OTLP log appender attached → {}", props.getEndpoint());
+                    log.info("[SigNoz] OTLP log appender attached → {} ({})",
+                            exportSettings.endpoint(OtlpExporterSettings.Signal.LOGS), exportSettings.getProtocolName());
                 }
             }
 

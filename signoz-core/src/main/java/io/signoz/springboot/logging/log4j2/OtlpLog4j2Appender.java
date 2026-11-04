@@ -8,7 +8,9 @@ import io.opentelemetry.api.logs.Severity;
 import io.opentelemetry.sdk.logs.SdkLoggerProvider;
 import io.signoz.springboot.errors.ErrorFingerprint;
 import io.signoz.springboot.logging.OtlpLogSupport;
+import io.signoz.springboot.export.OtlpExporterSettings;
 import io.signoz.springboot.masking.MaskingRegistry;
+import io.signoz.springboot.properties.SigNozExporterProperties;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
@@ -38,6 +40,7 @@ public class OtlpLog4j2Appender extends AbstractAppender {
     private String environment = "default";
     private long exportTimeoutMs = 5000L;
     private Map<String, String> headers = new HashMap<String, String>();
+    private String protocol;
     private MaskingRegistry maskingRegistry;
     private int errorFingerprintDepth;
 
@@ -55,7 +58,9 @@ public class OtlpLog4j2Appender extends AbstractAppender {
         if (otelLogger == null) {
             try {
                 loggerProvider = OtlpLogSupport.createLoggerProvider(
-                        endpoint, headers, exportTimeoutMs, serviceName, serviceVersion, environment);
+                        endpoint, headers,
+                    OtlpExporterSettings.parseProtocol(protocol, SigNozExporterProperties.Backend.SIGNOZ),
+                    exportTimeoutMs, serviceName, serviceVersion, environment);
                 otelLogger = loggerProvider.get(serviceName);
             } catch (Exception e) {
                 LOGGER.error("[SigNoz] Failed to initialize OTLP log appender: " + e.getMessage(), e);
@@ -93,6 +98,8 @@ public class OtlpLog4j2Appender extends AbstractAppender {
                 }
                 builder.setAllAttributes(attrs.build());
             }
+            // Trace context from the event's MDC, so backends link the record to its trace.
+            OtlpLogSupport.applyTraceContext(builder, context);
 
             builder.setAttribute(AttributeKey.stringKey("logger"), event.getLoggerName());
             builder.setAttribute(AttributeKey.stringKey("thread"), event.getThreadName());
@@ -146,6 +153,9 @@ public class OtlpLog4j2Appender extends AbstractAppender {
     public void setEnvironment(String environment) { this.environment = environment; }
     public void setExportTimeoutMs(long exportTimeoutMs) { this.exportTimeoutMs = exportTimeoutMs; }
     public void setHeaders(Map<String, String> headers) { this.headers = headers; }
+
+    /** {@code grpc} (default) or {@code http/protobuf}. */
+    public void setProtocol(String protocol) { this.protocol = protocol; }
     public void setMaskingRegistry(MaskingRegistry maskingRegistry) { this.maskingRegistry = maskingRegistry; }
     public void setErrorFingerprintDepth(int errorFingerprintDepth) { this.errorFingerprintDepth = errorFingerprintDepth; }
 }

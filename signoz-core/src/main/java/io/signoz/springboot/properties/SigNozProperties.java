@@ -25,7 +25,10 @@ public class SigNozProperties {
     /** Whether the SigNoz integration is enabled. Defaults to {@code true}. */
     private boolean enabled = true;
 
-    /** OTLP gRPC endpoint for SigNoz (collector or direct). Default: localhost:4317. */
+    /**
+     * OTLP endpoint (SigNoz, Grafana Cloud OTLP gateway, collector, …). Default: localhost:4317
+     * (gRPC). See {@code signoz.exporter.*} for the protocol and per-signal endpoints.
+     */
     private String endpoint = "http://localhost:4317";
 
     /** Logical name of this service as it appears in SigNoz. */
@@ -49,6 +52,10 @@ public class SigNozProperties {
      * via {@code OTEL_EXPORTER_OTLP_HEADERS} env var).
      */
     private Map<String, String> headers = new HashMap<String, String>();
+
+    /** OTLP export protocol, backend preset, credentials and per-signal endpoints. */
+    @NestedConfigurationProperty
+    private SigNozExporterProperties exporter = new SigNozExporterProperties();
 
     @NestedConfigurationProperty
     private SigNozLoggingProperties logging = new SigNozLoggingProperties();
@@ -102,6 +109,9 @@ public class SigNozProperties {
 
     public String getEnvironment() { return environment; }
     public void setEnvironment(String environment) { this.environment = environment; }
+
+    public SigNozExporterProperties getExporter() { return exporter; }
+    public void setExporter(SigNozExporterProperties exporter) { this.exporter = exporter; }
 
     public Map<String, String> getHeaders() { return headers; }
     public void setHeaders(Map<String, String> headers) { this.headers = headers; }

@@ -2,8 +2,14 @@ package io.signoz.springboot.logging;
 
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
-import io.opentelemetry.exporter.otlp.logs.OtlpGrpcLogRecordExporter;
-import io.opentelemetry.exporter.otlp.logs.OtlpGrpcLogRecordExporterBuilder;
+import io.opentelemetry.api.logs.LogRecordBuilder;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanContext;
+import io.opentelemetry.api.trace.TraceFlags;
+import io.opentelemetry.api.trace.TraceState;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.sdk.logs.export.LogRecordExporter;
+import io.signoz.springboot.export.OtlpExporterSettings;
 import io.opentelemetry.sdk.logs.SdkLoggerProvider;
 import io.opentelemetry.sdk.logs.export.BatchLogRecordProcessor;
 import io.opentelemetry.sdk.resources.Resource;
@@ -11,7 +17,6 @@ import io.opentelemetry.semconv.ResourceAttributes;
 import io.signoz.springboot.masking.MaskingRegistry;
 
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 /**
  * The OTLP log export and masking logic shared by every SigNoz log appender
@@ -34,18 +39,17 @@ public final class OtlpLogSupport {
         // utility class
     }
 
-    /** Builds the OTLP gRPC logger provider with the service resource attributes. */
+    /**
+     * Builds the OTLP logger provider with the service resource attributes, exporting over
+     * {@code protocol} ({@code grpc} when {@code null}) to {@code endpoint} exactly as given.
+     */
     public static SdkLoggerProvider createLoggerProvider(String endpoint, Map<String, String> headers,
+                                                         OtlpExporterSettings.Protocol protocol,
                                                          long exportTimeoutMs, String serviceName,
                                                          String serviceVersion, String environment) {
-        OtlpGrpcLogRecordExporterBuilder exporterBuilder = OtlpGrpcLogRecordExporter.builder()
-                .setEndpoint(endpoint)
-                .setTimeout(exportTimeoutMs, TimeUnit.MILLISECONDS);
-        if (headers != null) {
-            for (Map.Entry<String, String> entry : headers.entrySet()) {
-                exporterBuilder.addHeader(entry.getKey(), entry.getValue());
-            }
-        }
+        LogRecordExporter exporter = OtlpExporterSettings.logExporter(
+                protocol == null ? OtlpExporterSettings.Protocol.GRPC : protocol,
+                endpoint, headers, exportTimeoutMs);
         Resource resource = Resource.getDefault().merge(
                 Resource.create(Attributes.of(
                         ResourceAttributes.SERVICE_NAME, serviceName,
@@ -54,8 +58,42 @@ public final class OtlpLogSupport {
                 )));
         return SdkLoggerProvider.builder()
                 .setResource(resource)
-                .addLogRecordProcessor(BatchLogRecordProcessor.builder(exporterBuilder.build()).build())
+                .addLogRecordProcessor(BatchLogRecordProcessor.builder(exporter).build())
                 .build();
+    }
+
+    /**
+     * Sets the log record's trace context from the event's MDC (the OTel-native
+     * {@code trace_id}/{@code span_id}/{@code trace_flags}, else the legacy camelCase keys), so
+     * SigNoz and Grafana (Loki → Tempo) can link the log line to its trace natively. Without a
+     * valid pair in the MDC the record keeps the SDK default (the current OTel context).
+     */
+    public static void applyTraceContext(LogRecordBuilder builder, Map<String, String> mdc) {
+        SpanContext spanContext = spanContextFromMdc(mdc);
+        if (spanContext != null) {
+            builder.setContext(Context.root().with(Span.wrap(spanContext)));
+        }
+    }
+
+    static SpanContext spanContextFromMdc(Map<String, String> mdc) {
+        if (mdc == null || mdc.isEmpty()) {
+            return null;
+        }
+        SpanContext snake = spanContext(mdc.get("trace_id"), mdc.get("span_id"), mdc.get("trace_flags"));
+        return snake != null ? snake
+                : spanContext(mdc.get("traceId"), mdc.get("spanId"), mdc.get("traceFlags"));
+    }
+
+    private static SpanContext spanContext(String traceId, String spanId, String flags) {
+        if (traceId == null || spanId == null) {
+            return null;
+        }
+        TraceFlags traceFlags = flags != null && flags.matches("[0-9a-fA-F]{2}")
+                ? TraceFlags.fromHex(flags.toLowerCase(java.util.Locale.ROOT), 0) : TraceFlags.getSampled();
+        SpanContext ctx = SpanContext.createFromRemoteParent(
+                traceId.toLowerCase(java.util.Locale.ROOT), spanId.toLowerCase(java.util.Locale.ROOT),
+                traceFlags, TraceState.getDefault());
+        return ctx.isValid() ? ctx : null;
     }
 
     /**

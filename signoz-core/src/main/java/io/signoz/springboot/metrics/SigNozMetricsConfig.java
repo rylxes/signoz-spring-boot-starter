@@ -8,6 +8,7 @@ import io.micrometer.core.instrument.binder.jvm.JvmThreadMetrics;
 import io.micrometer.core.instrument.binder.system.ProcessorMetrics;
 import io.micrometer.core.instrument.binder.system.UptimeMetrics;
 import io.micrometer.registry.otlp.OtlpConfig;
+import io.signoz.springboot.export.OtlpExporterSettings;
 import io.micrometer.registry.otlp.OtlpMeterRegistry;
 import io.signoz.springboot.properties.SigNozProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -46,6 +47,7 @@ public class SigNozMetricsConfig {
     @Bean
     @ConditionalOnMissingBean(OtlpMeterRegistry.class)
     public OtlpMeterRegistry otlpMeterRegistry() {
+        final OtlpExporterSettings exportSettings = OtlpExporterSettings.resolve(props);
         OtlpConfig config = new OtlpConfig() {
             @Override
             public String get(String key) {
@@ -54,13 +56,9 @@ public class SigNozMetricsConfig {
 
             @Override
             public String url() {
-                // Micrometer OTLP uses HTTP/protobuf endpoint (port 4318 for OTLP HTTP)
-                String endpoint = props.getEndpoint();
-                // Convert gRPC endpoint (4317) hint to HTTP endpoint (4318) if needed
-                if (endpoint.contains(":4317")) {
-                    endpoint = endpoint.replace(":4317", ":4318");
-                }
-                return endpoint + "/v1/metrics";
+                // Micrometer's registry speaks OTLP over HTTP only; see
+                // OtlpExporterSettings.micrometerMetricsUrl() for how the URL is derived.
+                return exportSettings.micrometerMetricsUrl();
             }
 
             @Override
@@ -79,8 +77,7 @@ public class SigNozMetricsConfig {
 
             @Override
             public Map<String, String> headers() {
-                Map<String, String> h = props.getHeaders();
-                return (h != null) ? h : new HashMap<String, String>();
+                return exportSettings.getHeaders();
             }
         };
 
