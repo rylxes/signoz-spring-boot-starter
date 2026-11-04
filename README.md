@@ -85,18 +85,24 @@ That's it — all features are on by default.
 
 ## Logging Backend Support
 
-The starter's full logging pipeline is Logback-based. With Logback on the classpath,
-the starter can automatically attach `SigNozJsonEncoder`, `OtlpLogbackAppender`,
-MDC trace fields, error fingerprinting, and log sampling.
+The starter's logging features work with both **Logback** (Spring Boot's default) and
+**Log4j2**:
 
-Projects that use another SLF4J backend, such as Log4j2, can still use the
-backend-neutral instrumentation: tracing, audit events, HTTP logging filters,
-outbound propagation, database timing, SQS/gRPC/WebSocket propagation, and MDC
-trace IDs. In that setup, configure JSON layout, MDC fields, masking/export, and
-log shipping in your logging backend.
+| Feature | Logback | Log4j2 |
+|---|---|---|
+| JSON console output | `SigNozJsonEncoder` (`SIGNOZ_JSON`) | `SigNozLog4j2JsonLayout` (`SIGNOZ_JSON`), same field names |
+| Masking (`signoz.logging.masked-fields`, profiles, patterns) | yes | yes, applied to each value before serialisation |
+| OTLP log export | `OtlpLogbackAppender` (`SIGNOZ_OTLP`) | `OtlpLog4j2Appender` (`SIGNOZ_OTLP`), shared export and masking code |
+| Error fingerprinting (`errorId`) | MDC, via a turbo filter | added to the JSON line and OTLP record for ERROR events with a throwable |
+| Log sampling | turbo filter | context-wide Log4j2 filter |
+| MDC trace fields | yes | yes (the SLF4J MDC is Log4j2's ThreadContext) |
 
-For a Log4j2 project, exclude Spring Boot's default logging backend and the
-Logback encoder from the SigNoz starter, then add your own backend:
+The starter detects the active backend at startup and configures that one. In JSON
+mode it replaces Spring Boot's default console appender (`CONSOLE` for Logback,
+`Console` for Log4j2) unless your configuration already writes JSON.
+
+To switch a project to Log4j2, exclude Spring Boot's default logging starter and add
+`spring-boot-starter-log4j2`:
 
 ```xml
 <dependency>
@@ -108,10 +114,6 @@ Logback encoder from the SigNoz starter, then add your own backend:
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-logging</artifactId>
         </exclusion>
-        <exclusion>
-            <groupId>net.logstash.logback</groupId>
-            <artifactId>logstash-logback-encoder</artifactId>
-        </exclusion>
     </exclusions>
 </dependency>
 
@@ -121,9 +123,14 @@ Logback encoder from the SigNoz starter, then add your own backend:
 </dependency>
 ```
 
-When Logback is absent, Logback-specific auto-configuration is skipped. The
-starter still creates the shared masking registry for non-Logback features, but
-it does not install appenders or encoders for another logging implementation.
+Exclude `spring-boot-starter-logging` from every other starter that pulls it in as
+well (as with any Spring Boot Log4j2 setup), so Logback and `log4j-to-slf4j` are not
+on the classpath.
+
+> With the OpenTelemetry Java agent exporting logs, the starter leaves log export to
+> the agent on either backend and warns if masking rules are configured, since the
+> agent's appenders do not mask. Set `OTEL_INSTRUMENTATION_LOGBACK_APPENDER_ENABLED=false`
+> or `OTEL_INSTRUMENTATION_LOG4J_APPENDER_ENABLED=false` to let the starter export instead.
 
 ---
 
