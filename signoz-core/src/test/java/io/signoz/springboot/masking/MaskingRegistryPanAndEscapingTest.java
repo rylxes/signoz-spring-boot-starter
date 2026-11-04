@@ -177,7 +177,7 @@ class MaskingRegistryPanAndEscapingTest {
     void masksOAuthQueryParametersByDefault() {
         MaskingRegistry registry = new MaskingRegistry(new SigNozLoggingProperties());
 
-        for (String name : new String[]{"access_token", "refresh_token", "client_secret"}) {
+        for (String name : new String[]{"access_token", "refresh_token", "id_token", "client_secret"}) {
             assertThat(registry.maskQueryString("state=xyz&" + name + "=" + CANARY))
                     .isEqualTo("state=xyz&" + name + "=***");
         }

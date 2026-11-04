@@ -21,8 +21,8 @@
   content is withheld instead of being written unmasked. (#8)
 - **`signoz-ingestion-key` is never sent to a non-SigNoz backend** (when
   `signoz.exporter.backend` is not `signoz`); a warning is logged once. (#14)
-- **`access_token`, `refresh_token` and `client_secret` are now masked by default**,
-  wherever field masking applies, including query strings and bodies. The OAuth
+- **`access_token`, `refresh_token`, `id_token` and `client_secret` are now masked by
+  default**, wherever field masking applies, including query strings and bodies. The OAuth
   authorization `code` is not, because the name is too generic and masking it would
   hide error codes. To mask it, add `code` to `signoz.logging.masked-fields`, which
   replaces the default list, so include the other fields too.

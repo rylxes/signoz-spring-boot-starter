@@ -406,7 +406,7 @@ public class UserService {
 Built-in fields that are **always** masked (case-insensitive): `password`, `passwd`, `secret`,
 `token`, `apikey`, `api_key`, `creditcard`, `cardnumber`, `cvv`, `ssn`, `authorization`,
 `x-api-key`, `x-auth-token`, `access_token`,
-`refresh_token`, `client_secret`.
+`refresh_token`, `id_token`, `client_secret`.
 
 Add your own fields in `application.yml`:
 

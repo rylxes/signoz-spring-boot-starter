@@ -53,7 +53,7 @@ public class SigNozLoggingProperties {
             "password", "passwd", "secret", "token", "apikey", "api_key",
             "creditcard", "cardnumber", "card_number", "cvv",
             "ssn", "authorization", "x-api-key", "x-auth-token",
-            "access_token", "refresh_token", "client_secret"
+            "access_token", "refresh_token", "id_token", "client_secret"
     ));
 
     /**
