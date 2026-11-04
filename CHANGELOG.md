@@ -77,6 +77,15 @@
   The logged URL now has sensitive query parameters masked the same way as inbound requests,
   user info (`https://user:pass@host`) replaced with `***` and the fragment dropped; the URL
   inside a logged exception message is masked too.
+- **Security:** field names matched only as listed, apart from case. `access_token` in
+  `masked-fields` left `accessToken` and `access-token` in clear, and names no list
+  anticipates, such as `auth_token`, `clientSecret` or `X-Amz-Signature`, were never masked.
+  Names are now compared ignoring `_`, `-` and `.`, and any name ending in one of the new
+  `signoz.logging.masked-field-suffixes` (`token`, `secret`, `password`, `passwd`, `apikey`,
+  `signature`, `privatekey`) is masked in full unless it has its own entry. This applies
+  wherever fields are masked by name: JSON, `key=value`, query strings, headers, MDC, XML and
+  `ObjectMasker`. Set `masked-field-suffixes: []` to keep the previous behaviour; note that
+  names such as `nextPageToken` are now masked by default.
 - **Startup crash without Micrometer:** an application without Actuator or
   `micrometer-core` failed to start with `ClassNotFoundException: MeterRegistry`.
   `@Timed` and `@AlertOnFailure` now log without it, as documented; metrics are

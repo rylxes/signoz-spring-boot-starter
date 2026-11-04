@@ -47,13 +47,26 @@ public class SigNozLoggingProperties {
 
     /**
      * List of field names whose values should be fully masked in log output.
-     * Matching is case-insensitive. Built-in defaults are merged with this list.
+     * Matching is case-insensitive and ignores {@code _}, {@code -} and {@code .}, so
+     * {@code access_token} also covers {@code accessToken} and {@code access-token}. Built-in defaults are merged with this list.
      */
     private List<String> maskedFields = new ArrayList<>(Arrays.asList(
             "password", "passwd", "secret", "token", "apikey", "api_key",
             "creditcard", "cardnumber", "card_number", "cvv",
             "ssn", "authorization", "x-api-key", "x-auth-token",
             "access_token", "refresh_token", "id_token", "client_secret"
+    ));
+
+    /**
+     * Name endings that make a field sensitive even when it is not listed in {@code masked-fields},
+     * so the spellings no list anticipates ({@code auth_token}, {@code clientSecret},
+     * {@code X-Amz-Signature}) are still masked in full. Compared like field names: case-insensitive
+     * and ignoring {@code _}, {@code -} and {@code .}. A field listed in {@code masked-fields},
+     * a profile or {@code field-strategies} keeps its own strategy. Set to an empty list to turn
+     * suffix matching off.
+     */
+    private List<String> maskedFieldSuffixes = new ArrayList<>(Arrays.asList(
+            "token", "secret", "password", "passwd", "apikey", "signature", "privatekey"
     ));
 
     /**
@@ -129,6 +142,11 @@ public class SigNozLoggingProperties {
 
     public List<String> getMaskedFields() { return maskedFields; }
     public void setMaskedFields(List<String> maskedFields) { this.maskedFields = maskedFields; }
+
+    public List<String> getMaskedFieldSuffixes() { return maskedFieldSuffixes; }
+    public void setMaskedFieldSuffixes(List<String> maskedFieldSuffixes) {
+        this.maskedFieldSuffixes = maskedFieldSuffixes != null ? maskedFieldSuffixes : new ArrayList<>();
+    }
 
     public List<String> getProfiles() { return profiles; }
     public void setProfiles(List<String> profiles) {
