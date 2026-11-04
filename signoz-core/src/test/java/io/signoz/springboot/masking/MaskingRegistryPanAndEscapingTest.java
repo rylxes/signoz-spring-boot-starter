@@ -177,9 +177,18 @@ class MaskingRegistryPanAndEscapingTest {
     void masksOAuthQueryParametersByDefault() {
         MaskingRegistry registry = new MaskingRegistry(new SigNozLoggingProperties());
 
-        for (String name : new String[]{"access_token", "refresh_token", "client_secret", "code"}) {
+        for (String name : new String[]{"access_token", "refresh_token", "client_secret"}) {
             assertThat(registry.maskQueryString("state=xyz&" + name + "=" + CANARY))
                     .isEqualTo("state=xyz&" + name + "=***");
         }
+    }
+
+    @Test
+    @DisplayName("code is not masked by default: it is too generic and would hide error codes")
+    void leavesCodeVisibleByDefault() {
+        MaskingRegistry registry = new MaskingRegistry(new SigNozLoggingProperties());
+
+        assertThat(registry.maskJsonString("{\"code\":\"ERR_42\"}")).isEqualTo("{\"code\":\"ERR_42\"}");
+        assertThat(registry.maskJsonString("upstream failed code=500")).isEqualTo("upstream failed code=500");
     }
 }
